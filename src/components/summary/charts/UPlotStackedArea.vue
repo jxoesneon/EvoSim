@@ -6,6 +6,7 @@ interface Props {
   data: number[][]
   colors?: string[]
   fillOpacity?: number
+  epsilonFloor?: number
   class?: string
 }
 const props = defineProps<Props>()
@@ -168,5 +169,5 @@ watch(
 </script>
 
 <template>
-  <div ref="rootEl" class="relative w-full" :class="props.class"></div>
+  <div ref="rootEl" class="relative w-full" :class="props.class" data-testid="uplot-root"></div>
 </template>

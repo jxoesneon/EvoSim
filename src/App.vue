@@ -296,6 +296,16 @@ async function onLoadJSONBin() {
 
 onMounted(() => {
   simulationStore.initialize()
+  // Auto-open Summary modal when visiting with ?uplot=1 (for layout/e2e testing)
+  try {
+    const usp = new URLSearchParams(window.location.search)
+    if (usp.get('uplot') === '1') {
+      modalTitle.value = 'Summary'
+      modalContent.value = ''
+      modalKind.value = 'gen'
+      showModal.value = true
+    }
+  } catch {}
 })
 
 onBeforeUnmount(() => {
