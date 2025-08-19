@@ -1,0 +1,1405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ecosystem Evolution Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+        }
+        #app {
+            width: 100%;
+            height: 100%;
+        }
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        canvas {
+            background: #000;
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+        #tooltip {
+            position: absolute;
+            display: none;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #statsPanel, #modalContainer {
+            position: fixed;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 20;
+        }
+        #statsContent, #modalContent {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 600px;
+            position: relative;
+        }
+        #closePanelButton, #closeModalButton {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+        }
+        #closePanelButton:hover, #closeModalButton:hover { color: #333; }
+        .stat-item { margin-bottom: 8px; }
+        .side-panel-container {
+            position: fixed;
+            top: 0;
+            height: 100%;
+            z-index: 15;
+            display: flex;
+            align-items: center;
+            transition: transform 0.3s ease-in-out;
+        }
+        .side-panel {
+            width: 280px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        .toggle-panel-button {
+            width: 40px;
+            height: 40px;
+            background: #fff;
+            border: none;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 20px;
+        }
+        #leftPanelContainer { left: 0; }
+        #leftPanelContainer.collapsed { transform: translateX(-280px); }
+        #toggleLeftPanel { border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+        #rightPanelContainer { right: 0; }
+        #rightPanelContainer.collapsed { transform: translateX(280px); }
+        #toggleRightPanel { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+        .setting-item {
+            margin-bottom: 1rem;
+        }
+        .recent-bin-item {
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            margin-bottom: 4px;
+        }
+        .recent-bin-item:hover {
+            background-color: #e0e7ff;
+            border-color: #c7d2fe;
+        }
+        /* Tab Styles */
+        .tab-button {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-button.active {
+            border-color: #4f46e5;
+            font-weight: 600;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        input[type=checkbox].sr-only:checked + div + div {
+            transform: translateX(100%);
+            background-color: #4f46e5;
+        }
+        input[type=checkbox].sr-only:checked + div {
+             background-color: #a5b4fc;
+        }
+        details > summary {
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <!-- Control Buttons -->
+        <div class="control-panel bg-white/80 backdrop-blur-sm p-4 rounded-xl shadow-lg flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4">
+            <div class="flex space-x-2">
+                <button id="startButton" class="px-6 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75 transition-transform transform hover:scale-105">Start</button>
+                <button id="stopButton" class="px-6 py-2 bg-red-500 text-white font-semibold rounded-lg shadow-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75 transition-transform transform hover:scale-105">Stop</button>
+                <button id="resetButton" class="px-6 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition-transform transform hover:scale-105">Reset</button>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="addCreatureButton" class="px-4 py-2 bg-purple-500 text-white font-semibold rounded-lg shadow-md hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-opacity-75 transition-transform transform hover:scale-105">Add Creature</button>
+                <span class="font-medium text-gray-700 hidden sm:inline">|</span>
+                <button id="addPlantButton" class="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75 transition-transform transform hover:scale-105">Add Plant</button>
+            </div>
+        </div>
+        
+        <div id="leftPanelContainer" class="side-panel-container">
+            <div id="leftPanel" class="side-panel">
+                <h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Ecosystem Stats</h2>
+                <div id="generalStats"></div>
+                <h3 class="text-lg font-bold mt-6 mb-3 text-gray-800 border-b pb-2">Hall of Fame</h3>
+                <div id="hallOfFame"></div>
+            </div>
+            <button id="toggleLeftPanel" class="toggle-panel-button">📊</button>
+        </div>
+        
+        <div id="rightPanelContainer" class="side-panel-container collapsed">
+            <button id="toggleRightPanel" class="toggle-panel-button">⚙️</button>
+            <div id="rightPanel" class="side-panel">
+                 <h2 class="text-xl font-bold mb-4 text-gray-800 border-b pb-2">Settings</h2>
+                 <div id="settingsContainer"></div>
+            </div>
+        </div>
+
+        <canvas id="ecosystemCanvas"></canvas>
+
+        <div id="tooltip"></div>
+
+        <div id="statsPanel">
+            <div id="statsContent">
+                <span id="closePanelButton">&times;</span>
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Creature Stats</h2>
+                <div class="border-b border-gray-200">
+                    <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                        <button id="statsTab" class="tab-button active">Stats</button>
+                        <button id="brainTab" class="tab-button">Brain</button>
+                    </nav>
+                </div>
+                <div id="statsTabContent" class="tab-content active pt-4">
+                    <div id="statsDetails"></div>
+                </div>
+                <div id="brainTabContent" class="tab-content pt-4">
+                    <canvas id="brainCanvas" width="550" height="400"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="modalContainer">
+            <div id="modalContent">
+                <span id="closeModalButton">&times;</span>
+                <h2 id="modalTitle" class="text-2xl font-bold mb-4 text-gray-800">Modal</h2>
+                <div id="modalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Perlin Noise Generator ---
+        const Perlin = {
+            p: new Uint8Array(512),
+            init: function(seed) {
+                const p = new Uint8Array(256);
+                for (let i = 0; i < 256; i++) p[i] = i;
+                for (let i = 255; i > 0; i--) {
+                    const j = Math.floor((seed + i * 65537) % (i + 1));
+                    [p[i], p[j]] = [p[j], p[i]];
+                }
+                this.p = new Uint8Array(512);
+                for (let i = 0; i < 256; i++) this.p[i] = this.p[i + 256] = p[i];
+            },
+            noise: function(x, y, z = 0) {
+                const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
+                x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+                const u = this.fade(x), v = this.fade(y), w = this.fade(z);
+                const A = this.p[X] + Y, AA = this.p[A] + Z, AB = this.p[A + 1] + Z,
+                      B = this.p[X + 1] + Y, BA = this.p[B] + Z, BB = this.p[B + 1] + Z;
+                return this.lerp(w, this.lerp(v, this.lerp(u, this.grad(this.p[AA], x, y, z), this.grad(this.p[BA], x - 1, y, z)), this.lerp(u, this.grad(this.p[AB], x, y - 1, z), this.grad(this.p[BB], x - 1, y - 1, z))), this.lerp(v, this.lerp(u, this.grad(this.p[AA + 1], x, y, z - 1), this.grad(this.p[BA + 1], x - 1, y, z - 1)), this.lerp(u, this.grad(this.p[AB + 1], x, y - 1, z - 1), this.grad(this.p[BB + 1], x - 1, y - 1, z - 1))));
+            },
+            fade: t => t * t * t * (t * (t * 6 - 15) + 10),
+            lerp: (t, a, b) => a + t * (b - a),
+            grad: (hash, x, y, z) => {
+                const h = hash & 15;
+                const u = h < 8 ? x : y, v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+                return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+            }
+        };
+
+        // --- DOM Element Selection ---
+        const canvas = document.getElementById('ecosystemCanvas');
+        const ctx = canvas.getContext('2d');
+        const tooltip = document.getElementById('tooltip');
+        const statsPanel = document.getElementById('statsPanel');
+        const statsDetails = document.getElementById('statsDetails');
+        const closeModalButton = document.getElementById('closeModalButton');
+        const modalContainer = document.getElementById('modalContainer');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+        const closePanelButton = document.getElementById('closePanelButton');
+        const leftPanelContainer = document.getElementById('leftPanelContainer');
+        const toggleLeftPanel = document.getElementById('toggleLeftPanel');
+        const rightPanelContainer = document.getElementById('rightPanelContainer');
+        const toggleRightPanel = document.getElementById('toggleRightPanel');
+        const generalStatsDiv = document.getElementById('generalStats');
+        const hallOfFameDiv = document.getElementById('hallOfFame');
+        const settingsContainer = document.getElementById('settingsContainer');
+        const statsTab = document.getElementById('statsTab');
+        const brainTab = document.getElementById('brainTab');
+        const statsTabContent = document.getElementById('statsTabContent');
+        const brainTabContent = document.getElementById('brainTabContent');
+        const brainCanvas = document.getElementById('brainCanvas');
+        const brainCtx = brainCanvas.getContext('2d');
+        
+        // --- Global State Variables ---
+        let animationFrameId;
+        let creatures = [];
+        let plants = [];
+        let corpses = [];
+        let selectedCreature = null;
+        let graveyard = [];
+        let brainCache = {};
+        let frameCount = 0;
+        let simulationSpeed = 1.0;
+        let updateCounter = 0.0;
+        let maxBrainComplexity = 12;
+        let showVisionCones = false;
+        let showWeather = false;
+        let elitePoolSize = 10;
+        let newPopulationSize = 100;
+        let terrainSeed = 0;
+        let weatherSeed = 0;
+        let activeStatsTab = 'stats';
+        let terrainCanvas, weatherCanvas, elevationData, climateData, fertilityData, weatherData;
+
+        // --- Configurable Simulation Rules ---
+        let lifespanMultiplier = 1.0;
+        let mutationRate = 0.2;
+        let mutationAmount = 0.1;
+        let mutationRateAddLayer = 0.01;
+        let gestationPeriod = 200;
+        let reproductionEnergy = 80;
+
+        // --- Hard-coded Constants ---
+        const JSONBIN_API_KEY = "$2a$10$Sx7LhMS87hUy2.I1BFh.deuwvZTgHM9sehRTJxGHeCZJ4.wgB0r92";
+        let initialCreatures = 50;
+        let initialPlants = 150;
+        const matingDistance = 50;
+        const attackDistance = 15;
+        let plantSpawnRate = 0.2;
+        let waterLevel = 0.35;
+        let camera = { x: 0, y: 0, zoom: 1 };
+        let isDragging = false;
+        let lastMousePos = { x: 0, y: 0 };
+        let hasDragged = false;
+        let minZoomLevel = 1;
+        const MAX_ZOOM = 10;
+
+        // --- Gene Definitions with Metabolic Costs ---
+        const GENE_POOL = {
+            thirstRate: { D: ['T', 0.15, 1.0], R: ['t', 0.08, 1.0] },
+            metabolism: { D: ['M', 0.1, 1.0], R: ['m', 0.05, 1.0] },
+            hardiness:  { D: ['H', 0.7, 1.1], R: ['h', 1.0, 1.0] },
+            speed:      { D: ['S', 2.5, 1.15], R: ['s', 1.5, 1.0] },
+            size:       { D: ['Z', 1.2, 1.2], R: ['z', 0.8, 1.0] },
+            sightRange: { D: ['V', 150, 1.1], R: ['v', 75, 1.0] },
+            brainComplexity: { D: ['C', 12, 1.2], R: ['c', 8, 1.0] },
+            maxLifespan:{ D: ['L', 5000, 1.0], R: ['l', 3000, 1.0] },
+            diet:       { D: ['B', 'Herbivore', 1.0], R: ['c', 'Carnivore', 1.0] },
+            swimmingSkill: { D: ['W', 0.4, 1.05], R: ['w', 0.2, 1.0] },
+            fearResponse:  { D: ['F', 1.5, 1.05], R: ['f', 0.8, 1.0] },
+            fieldOfView: { D: ['E', Math.PI * 1.5, 1.0], R: ['e', Math.PI, 1.0] },
+            binocularOverlap: { D: ['O', Math.PI / 3, 1.0], R: ['o', Math.PI / 6, 1.0] },
+        };
+
+        // --- Name Generation ---
+        let nameCache = [];
+        let isFetchingNames = false;
+        async function fillNameCache() {
+            if (isFetchingNames) return;
+            isFetchingNames = true;
+            try {
+                const response = await fetch('https://randomuser.me/api/?results=50&inc=name');
+                const data = await response.json();
+                const newNames = data.results.map(user => user.name.first);
+                nameCache.push(...newNames);
+            } catch (error) { console.error("Failed to fetch names:", error); }
+            finally { isFetchingNames = false; }
+        }
+        function getRandomName() {
+            if (nameCache.length < 10 && !isFetchingNames) fillNameCache();
+            if (nameCache.length === 0) return `C-${Math.floor(Math.random() * 1000)}`;
+            return nameCache.pop();
+        }
+
+        // --- Utility Functions ---
+        const getRandom = (min, max) => Math.random() * (max - min) + min;
+        const sigmoid = x => 1 / (1 + Math.exp(-x));
+        function gaussianRandom() {
+            let u = 0, v = 0;
+            while(u === 0) u = Math.random(); while(v === 0) v = Math.random();
+            return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+        }
+
+        // --- Terrain & Weather Generation ---
+        function generateTerrain(seed) {
+            terrainSeed = seed || Math.random() * 100000;
+            terrainCanvas = document.createElement('canvas');
+            terrainCanvas.width = 2000; terrainCanvas.height = 2000;
+            const tCtx = terrainCanvas.getContext('2d');
+            const imgData = tCtx.createImageData(terrainCanvas.width, terrainCanvas.height);
+            elevationData = Array(terrainCanvas.width).fill(0).map(() => new Float32Array(terrainCanvas.height));
+            climateData = Array(terrainCanvas.width).fill(0).map(() => new Float32Array(terrainCanvas.height));
+            fertilityData = Array(terrainCanvas.width).fill(0).map(() => new Float32Array(terrainCanvas.height));
+            
+            Perlin.init(terrainSeed); const eScale = 0.00125;
+            Perlin.init(terrainSeed + 1); const cScale = 0.0025;
+            Perlin.init(terrainSeed + 2); const fScale = 0.00625;
+            for (let x = 0; x < terrainCanvas.width; x++) {
+                for (let y = 0; y < terrainCanvas.height; y++) {
+                    const e = (Perlin.noise(x * eScale, y * eScale) + 1) / 2;
+                    const c = (Perlin.noise(x * cScale, y * cScale) + 1) / 2;
+                    const f = (Perlin.noise(x * fScale, y * fScale) + 1) / 2;
+                    elevationData[x][y] = e; climateData[x][y] = c; fertilityData[x][y] = f;
+                    let r, g, b;
+                    if (e < waterLevel) { r = 50; g = 100; b = 200 - e * 100; }
+                    else if (e < 0.45) { r = 210; g = 180; b = 140; }
+                    else if (e < 0.7) { r = 50 + c * 50; g = 150 - e * 100; b = 50; }
+                    else if (e < 0.85) { r = 139 - c * 30; g = 110 - e * 50; b = 90; }
+                    else { r = 200 - c * 50; g = 200 - c * 50; b = 210; }
+                    const idx = (y * terrainCanvas.width + x) * 4;
+                    imgData.data[idx] = r; imgData.data[idx + 1] = g; imgData.data[idx + 2] = b; imgData.data[idx + 3] = 255;
+                }
+            }
+            tCtx.putImageData(imgData, 0, 0);
+            generateWeather(terrainSeed + 3);
+        }
+        
+        function generateWeather(seed) {
+            weatherSeed = seed || Math.random() * 100000;
+            weatherData = {
+                x: Array(41).fill(0).map(() => new Float32Array(41)),
+                y: Array(41).fill(0).map(() => new Float32Array(41))
+            };
+            weatherCanvas = document.createElement('canvas');
+            weatherCanvas.width = 2000; weatherCanvas.height = 2000;
+        }
+
+        function updateAndDrawWeather() {
+            const wCtx = weatherCanvas.getContext('2d');
+            wCtx.clearRect(0, 0, 2000, 2000);
+            if (!showWeather) return;
+            
+            wCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+            wCtx.lineWidth = 1;
+
+            Perlin.init(weatherSeed); const wScale = 0.01;
+            const timeScale = 0.0005;
+
+            for (let i = 0; i <= 40; i++) {
+                for (let j = 0; j <= 40; j++) {
+                    const x = i * 50;
+                    const y = j * 50;
+                    const noiseX = Perlin.noise(x * wScale, y * wScale, frameCount * timeScale) * 2 - 1;
+                    const noiseY = Perlin.noise(x * wScale + 100, y * wScale + 100, frameCount * timeScale) * 2 - 1;
+                    weatherData.x[i][j] = noiseX * 0.05;
+                    weatherData.y[i][j] = noiseY * 0.05;
+                    
+                    wCtx.beginPath();
+                    wCtx.moveTo(x, y);
+                    wCtx.lineTo(x + noiseX * 20, y + noiseY * 20);
+                    wCtx.stroke();
+                }
+            }
+        }
+        
+        // --- NEW Hashing and Median Functions ---
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = (hash << 5) - hash + char;
+                hash &= hash;
+            }
+            return new Uint32Array([hash])[0].toString(36);
+        }
+        
+        function calculateMedian(arr) {
+            if (arr.length === 0) return 0;
+            const sorted = [...arr].sort((a, b) => a - b);
+            const mid = Math.floor(sorted.length / 2);
+            return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+        }
+
+        function trimCache(cache, maxEntries, trimPercent) {
+            const keys = Object.keys(cache);
+            if (keys.length <= maxEntries) return cache;
+            
+            const sorted = keys.map(key => ({ key, score: cache[key].score })).sort((a, b) => a.score - b.score);
+            const trimCount = Math.floor(keys.length * trimPercent);
+            const trimmedKeys = sorted.slice(0, trimCount).map(item => item.key);
+            
+            const newCache = { ...cache };
+            trimmedKeys.forEach(key => delete newCache[key]);
+            console.log(`Trimmed brain cache from ${keys.length} to ${Object.keys(newCache).length} entries.`);
+            return newCache;
+        }
+
+        // --- Neural Network Class (Rewritten for multiple layers) ---
+        class NeuralNetwork {
+            constructor(layerSizes) {
+                this.layerSizes = layerSizes;
+                this.weights = [];
+                this.biases = [];
+                this.activations = [];
+
+                for (let i = 0; i < layerSizes.length - 1; i++) {
+                    const inSize = layerSizes[i];
+                    const outSize = layerSizes[i+1];
+                    this.weights.push(Array(outSize).fill().map(() => Array(inSize).fill().map(() => getRandom(-1, 1))));
+                    this.biases.push(Array(outSize).fill().map(() => getRandom(-1, 1)));
+                }
+            }
+
+            feedForward(inputArray) {
+                let currentActivations = inputArray;
+                this.activations = [currentActivations];
+
+                for (let i = 0; i < this.weights.length; i++) {
+                    const weightMatrix = this.weights[i];
+                    const biasVector = this.biases[i];
+                    currentActivations = weightMatrix.map((w, j) => {
+                        const sum = w.reduce((acc, val, k) => acc + val * currentActivations[k], 0);
+                        return sigmoid(sum + biasVector[j]);
+                    });
+                    this.activations.push(currentActivations);
+                }
+                return currentActivations;
+            }
+
+            mutate(rate, amount, addLayerRate, newLayerSize) {
+                const newNN = NeuralNetwork.fromJSON(this.toJSON());
+
+                for (let i = 0; i < newNN.weights.length; i++) {
+                    for (let r = 0; r < newNN.weights[i].length; r++) {
+                        for (let c = 0; c < newNN.weights[i][r].length; c++) {
+                            if (Math.random() < rate) newNN.weights[i][r][c] += gaussianRandom() * amount;
+                        }
+                    }
+                    for (let j = 0; j < newNN.biases[i].length; j++) {
+                        if (Math.random() < rate) newNN.biases[i][j] += gaussianRandom() * amount;
+                    }
+                }
+
+                if (Math.random() < addLayerRate && newNN.layerSizes.length < 5) { 
+                    const hiddenLayers = newNN.layerSizes.length - 2;
+                    const insertionIndex = 1 + Math.floor(Math.random() * (hiddenLayers + 1));
+                    
+                    newNN.layerSizes.splice(insertionIndex, 0, newLayerSize);
+                    
+                    newNN.weights = [];
+                    newNN.biases = [];
+                    for (let i = 0; i < newNN.layerSizes.length - 1; i++) {
+                        const inSize = newNN.layerSizes[i];
+                        const outSize = newNN.layerSizes[i+1];
+                        newNN.weights.push(Array(outSize).fill().map(() => Array(inSize).fill().map(() => getRandom(-1, 1))));
+                        newNN.biases.push(Array(outSize).fill().map(() => getRandom(-1, 1)));
+                    }
+                }
+                return newNN;
+            }
+            
+            toJSON() {
+                return {
+                    layerSizes: this.layerSizes,
+                    weights: this.weights,
+                    biases: this.biases
+                };
+            }
+
+            static fromJSON(data) {
+                if (!data.layerSizes) {
+                    const numInputs = data.inputNodes || 14;
+                    const numHidden = data.hiddenNodes || 8;
+                    const numOutputs = data.outputNodes || 8;
+                    const nn = new NeuralNetwork([numInputs, numHidden, numOutputs]);
+                    nn.weights[0] = data.weights_ih;
+                    nn.weights[1] = data.weights_ho;
+                    nn.biases[0] = data.bias_h;
+                    nn.biases[1] = data.bias_o;
+                    return nn;
+                }
+                const nn = new NeuralNetwork(data.layerSizes);
+                nn.weights = data.weights;
+                nn.biases = data.biases;
+                return nn;
+            }
+        }
+
+        // --- Creature Class ---
+        class Creature {
+            constructor(x, y, parentBrain, genes) {
+                this.id = Math.random().toString(36).substr(2, 9); this.name = getRandomName();
+                this.x = x; this.y = y; this.vx = getRandom(-1, 1); this.vy = getRandom(-1, 1);
+                this.energy = 100; this.thirst = 100; this.stamina = 100; this.health = 100;
+                this.sDrive = 0; this.fear = 0; this.lifespan = 0;
+                this.isPregnant = false; this.gestationTimer = 0; this.childGenes = null;
+                
+                this.communicationColor = { r: 255, g: 180, b: 255 };
+                this.isResting = false;
+                this.isSprinting = false;
+                this.actionAttack = 0;
+                this.actionMate = 0;
+                this.actionSprint = 0;
+                this.actionRest = 0;
+                this.actionCommunicateR = 0;
+                this.actionCommunicateG = 0;
+                this.actionCommunicateB = 0;
+
+                this.genes = genes || this.getRandomGenes();
+                this.phenotype = {};
+                this.metabolicCostMultiplier = 1.0;
+                this.calculatePhenotype();
+                
+                this.radius = 5 * this.phenotype.size;
+                this.maxStamina = 100 * this.phenotype.size;
+                this.stamina = this.maxStamina;
+
+                const numInputs = 14;
+                const numOutputs = 8;
+                
+                if (parentBrain) {
+                    this.brain = parentBrain;
+                } else {
+                    const hiddenLayers = [this.phenotype.brainComplexity];
+                    this.brain = new NeuralNetwork([numInputs, ...hiddenLayers, numOutputs]);
+                }
+            }
+
+            getRandomGenes() {
+                const genes = {};
+                for (const trait in GENE_POOL) {
+                    const gene = GENE_POOL[trait];
+                    let allele1 = Math.random() < 0.5 ? gene.D[0] : gene.R[0];
+                    let allele2 = Math.random() < 0.5 ? gene.D[0] : gene.R[0];
+                    if (trait === 'diet' && Math.random() > 0.05) {
+                        allele1 = 'B'; allele2 = 'B';
+                    }
+                    genes[trait] = [allele1, allele2];
+                }
+                const complexityGene = GENE_POOL.brainComplexity;
+                if (GENE_POOL.brainComplexity.D[1] > maxBrainComplexity) genes.brainComplexity[0] = complexityGene.R[0];
+                if (GENE_POOL.brainComplexity.D[1] > maxBrainComplexity) genes.brainComplexity[1] = complexityGene.R[0];
+
+                return genes;
+            }
+
+            calculatePhenotype() {
+                let totalCost = 1.0;
+                for (const trait in this.genes) {
+                    const geneInfo = GENE_POOL[trait];
+                    const alleles = this.genes[trait];
+                    if (alleles.includes(geneInfo.D[0])) {
+                        this.phenotype[trait] = geneInfo.D[1];
+                        totalCost *= geneInfo.D[2];
+                    } else {
+                        this.phenotype[trait] = geneInfo.R[1];
+                        totalCost *= geneInfo.R[2];
+                    }
+                }
+                this.phenotype.brainComplexity = Math.min(this.phenotype.brainComplexity, maxBrainComplexity);
+                this.metabolicCostMultiplier = totalCost;
+            }
+
+            think(plantList, creatureList, corpseList) {
+                let closestFood = null, minFoodDist = Infinity;
+                let closestMate = null, minMateDist = Infinity;
+                let closestThreat = null, minThreatDist = Infinity;
+                let closestWater = null, minWaterDist = Infinity;
+                let closestCreatureColor = {r: 0, g: 0, b: 0};
+
+                const sight = this.phenotype.sightRange;
+                const fov = this.phenotype.fieldOfView;
+                const heading = Math.atan2(this.vy, this.vx);
+
+                const isVisible = (target) => {
+                    const angleToTarget = Math.atan2(target.y - this.y, target.x - this.x);
+                    let angleDiff = Math.abs(heading - angleToTarget);
+                    if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
+                    return angleDiff < fov / 2;
+                };
+
+                if (this.phenotype.diet === 'Herbivore') {
+                    plantList.forEach(p => {
+                        const d = Math.hypot(p.x - this.x, p.y - this.y);
+                        if (d < sight && d < minFoodDist && isVisible(p)) { minFoodDist = d; closestFood = p; }
+                    });
+                } else {
+                    corpseList.forEach(c => {
+                        const d = Math.hypot(c.x - this.x, c.y - this.y);
+                        if (d < sight && d < minFoodDist && isVisible(c)) { minFoodDist = d; closestFood = c; }
+                    });
+                }
+                creatureList.forEach(c => {
+                    if (c.id === this.id) return;
+                    const d = Math.hypot(c.x - this.x, c.y - this.y);
+                    if (d < sight && isVisible(c)) {
+                        if (this.phenotype.diet === 'Carnivore' && c.phenotype.diet === 'Herbivore' && d < minFoodDist) { minFoodDist = d; closestFood = c; }
+                        if (c.phenotype.diet === 'Carnivore' && d < minThreatDist) { minThreatDist = d; closestThreat = c; }
+                        if (d < minMateDist) { minMateDist = d; closestMate = c; closestCreatureColor = c.communicationColor; }
+                    }
+                });
+                for(let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4;
+                    const checkX = this.x + Math.cos(angle) * sight;
+                    const checkY = this.y + Math.sin(angle) * sight;
+                    if (isVisible({x: checkX, y: checkY})) {
+                        const ix = Math.max(0, Math.min(terrainCanvas.width - 1, Math.round(checkX)));
+                        const iy = Math.max(0, Math.min(terrainCanvas.height - 1, Math.round(checkY)));
+                        if (elevationData[ix][iy] < waterLevel) {
+                            const d = Math.hypot(checkX - this.x, checkY - this.y);
+                            if(d < minWaterDist) { minWaterDist = d; closestWater = {x: checkX, y: checkY}; }
+                        }
+                    }
+                }
+
+                const inputs = [
+                    closestFood ? (closestFood.x - this.x) / sight : 0,
+                    closestFood ? (closestFood.y - this.y) / sight : 0,
+                    closestMate ? (closestMate.x - this.x) / sight : 0,
+                    closestMate ? (closestMate.y - this.y) / sight : 0,
+                    closestWater ? (closestWater.x - this.x) / sight : 0,
+                    closestWater ? (closestWater.y - this.y) / sight : 0,
+                    closestThreat ? (closestThreat.x - this.x) / sight : 0,
+                    closestThreat ? (closestThreat.y - this.y) / sight : 0,
+                    closestCreatureColor.r / 255,
+                    closestCreatureColor.b / 255,
+                    this.energy / 100, this.thirst / 100, this.stamina / this.maxStamina, this.sDrive / 100,
+                ];
+
+                const output = this.brain.feedForward(inputs);
+
+                const turn = output[0] * 2 - 1;
+                const thrust = output[1] * 2 - 1;
+                this.vx += turn * 0.1;
+                this.vy += thrust * 0.1;
+                this.actionSprint       = output[2];
+                this.actionAttack       = output[3];
+                this.actionMate         = output[4];
+                this.actionRest         = output[5];
+                this.actionCommunicateR = output[6];
+                this.actionCommunicateB = output[7];
+            }
+
+            move() {
+                this.lifespan++;
+                this.isSprinting = false;
+                this.isResting = false;
+                
+                if (this.actionRest > 0.8) {
+                    this.isResting = true;
+                    this.vx *= 0.8;
+                    this.vy *= 0.8;
+                    this.stamina = Math.min(this.maxStamina, this.stamina + 1.5);
+                } else {
+                    this.stamina = Math.min(this.maxStamina, this.stamina + 0.2);
+                }
+
+                const speed = Math.hypot(this.vx, this.vy);
+                let maxSpeed = this.phenotype.speed;
+                if (this.actionSprint > 0.8 && this.stamina > 10 && !this.isResting) {
+                    this.isSprinting = true;
+                    maxSpeed *= 1.5;
+                    this.stamina -= 0.8;
+                }
+                
+                if (speed > maxSpeed) {
+                    this.vx = (this.vx / speed) * maxSpeed;
+                    this.vy = (this.vy / speed) * maxSpeed;
+                }
+
+                this.communicationColor.r = this.actionCommunicateR * 255;
+                this.communicationColor.g = 180;
+                this.communicationColor.b = this.actionCommunicateB * 255;
+
+                const weatherGridX = Math.floor(this.x / 50);
+                const weatherGridY = Math.floor(this.y / 50);
+                this.vx += weatherData.x[weatherGridX][weatherGridY];
+                this.vy += weatherData.y[weatherGridX][weatherGridY];
+
+                const ix = Math.max(0, Math.min(terrainCanvas.width - 1, Math.round(this.x)));
+                const iy = Math.max(0, Math.min(terrainCanvas.height - 1, Math.round(this.y)));
+                const elevation = elevationData[ix][iy] || 0;
+                
+                let speedModifier = 1.0;
+                if (elevation < waterLevel) {
+                    if (this.phenotype.swimmingSkill < (waterLevel - elevation)) this.health -= 0.5;
+                    this.thirst = Math.min(100, this.thirst + 1.5);
+                    speedModifier = 0.5;
+                } else {
+                    speedModifier = Math.max(0.1, 1 - (elevation - waterLevel));
+                }
+
+                if (this.stamina < 20) speedModifier *= 0.5;
+
+                this.x += this.vx * speedModifier;
+                this.y += this.vy * speedModifier;
+                
+                const climate = climateData[ix][iy] || 0;
+                const sizeModifier = this.phenotype.size;
+                const hardinessModifier = this.phenotype.hardiness;
+                const climatePenalty = Math.max(0, (0.5 - climate) * 0.1) * hardinessModifier;
+                const terrainPenalty = Math.max(0, elevation - 0.5) * 0.1 * hardinessModifier;
+
+                let metabolismCost = (this.phenotype.metabolism + terrainPenalty) * sizeModifier * this.metabolicCostMultiplier;
+                if (this.isSprinting) metabolismCost *= 2;
+                if (this.isPregnant) metabolismCost *= 1.5;
+
+                this.energy -= metabolismCost;
+                this.thirst -= (this.phenotype.thirstRate + climatePenalty) * sizeModifier;
+                
+                this.sDrive = Math.min(100, this.sDrive + 0.1);
+                
+                if (this.energy < 20 || this.thirst < 20) this.health -= 0.1;
+                else if (this.energy > 80 && this.thirst > 80) this.health = Math.min(100, this.health + 0.05);
+
+                if (this.x > terrainCanvas.width + this.radius) this.x = -this.radius; else if (this.x < -this.radius) this.x = terrainCanvas.width + this.radius;
+                if (this.y > terrainCanvas.height + this.radius) this.y = -this.radius; else if (this.y < -this.radius) this.y = terrainCanvas.height + this.radius;
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
+                ctx.fillStyle = `rgb(${this.communicationColor.r}, ${this.communicationColor.g}, ${this.communicationColor.b})`;
+                ctx.fill();
+                
+                ctx.beginPath();
+                const healthRatio = this.health / 100;
+                if (this.phenotype.diet === 'Carnivore') {
+                    ctx.fillStyle = `rgba(${150 + 105 * healthRatio}, 100, 100, 0.9)`;
+                } else {
+                    ctx.fillStyle = `rgba(255, ${100 + 155 * healthRatio}, ${100 + 155 * healthRatio}, 0.9)`;
+                }
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (this.isPregnant) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius * 0.5, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                    ctx.fill();
+                }
+
+                if (showVisionCones) {
+                    const heading = Math.atan2(this.vy, this.vx);
+                    const fov = this.phenotype.fieldOfView;
+                    const range = this.phenotype.sightRange;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.arc(this.x, this.y, range, heading - fov / 2, heading + fov / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+            toJSON() {
+                return {
+                    id: this.id, name: this.name,
+                    x: this.x, y: this.y, vx: this.vx, vy: this.vy,
+                    energy: this.energy, thirst: this.thirst, stamina: this.stamina, health: this.health,
+                    sDrive: this.sDrive, fear: this.fear, lifespan: this.lifespan,
+                    isPregnant: this.isPregnant, gestationTimer: this.gestationTimer, childGenes: this.childGenes,
+                    genes: this.genes,
+                    brain: this.brain.toJSON()
+                };
+            }
+            static fromJSON(data) {
+                const c = new Creature(data.x, data.y);
+                Object.assign(c, data);
+                c.brain = NeuralNetwork.fromJSON(data.brain);
+                c.calculatePhenotype();
+                c.radius = 5 * c.phenotype.size;
+                c.maxStamina = 100 * c.phenotype.size;
+                return c;
+            }
+        }
+
+        class Plant {
+            constructor(x, y) { this.x = x; this.y = y; this.radius = 3; }
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(40, 167, 69, 0.9)';
+                ctx.fill();
+            }
+        }
+        
+        class Corpse {
+            constructor(creature) {
+                this.x = creature.x;
+                this.y = creature.y;
+                this.radius = creature.radius;
+                this.energyRemaining = creature.phenotype.size * 100;
+                this.initialDecayTime = 2000;
+                this.decayTimer = this.initialDecayTime;
+            }
+            draw() {
+                const poisonThreshold = this.initialDecayTime * 0.25;
+                if (this.decayTimer < poisonThreshold) {
+                    ctx.fillStyle = 'rgba(120, 50, 120, 0.7)';
+                } else {
+                    ctx.fillStyle = 'rgba(100, 100, 100, 0.7)';
+                }
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius * (this.energyRemaining / 100), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // --- Simulation Logic ---
+        function init() {
+            creatures = []; plants = []; corpses = []; graveyard = []; brainCache = {}; frameCount = 0;
+            for (let i = 0; i < initialCreatures; i++) {
+                let x, y;
+                do { x = getRandom(0, terrainCanvas.width); y = getRandom(0, terrainCanvas.height); }
+                while (elevationData[Math.floor(x)][Math.floor(y)] < waterLevel);
+                creatures.push(new Creature(x, y));
+            }
+            for (let i = 0; i < initialPlants; i++) {
+                let x, y;
+                do { x = getRandom(0, terrainCanvas.width); y = getRandom(0, terrainCanvas.height); }
+                while (elevationData[Math.floor(x)][Math.floor(y)] < waterLevel || fertilityData[Math.floor(x)][Math.floor(y)] < 0.5);
+                plants.push(new Plant(x, y));
+            }
+        }
+
+        function genesis() {
+            const allBrains = Object.values(brainCache);
+            if (allBrains.length < 2) { 
+                init(); 
+                return; 
+            }
+            
+            allBrains.sort((a, b) => b.score - a.score);
+            const fittest = allBrains.slice(0, elitePoolSize);
+            const scores = allBrains.map(b => b.score);
+            const medianScore = calculateMedian(scores);
+            
+            creatures = [];
+            for (let i = 0; i < newPopulationSize; i++) {
+                const parentA = fittest[Math.floor(Math.random() * fittest.length)];
+                const parentB = fittest[Math.floor(Math.random() * fittest.length)];
+
+                const childGenes = {};
+                for (const trait in parentA.genes) {
+                    const allele1 = parentA.genes[trait][Math.floor(Math.random() * 2)];
+                    const allele2 = parentB.genes[trait][Math.floor(Math.random() * 2)];
+                    childGenes[trait] = [allele1, allele2];
+                }
+
+                let childBrain, childHash;
+                let tries = 0;
+                do {
+                    const parentBrain = NeuralNetwork.fromJSON(parentA.brain);
+                    childBrain = parentBrain.mutate(mutationRate, mutationAmount, mutationRateAddLayer, maxBrainComplexity);
+                    childHash = simpleHash(JSON.stringify(childBrain.toJSON()));
+                    tries++;
+                } while (brainCache[childHash] && brainCache[childHash].score < medianScore && tries < 5);
+
+                let x, y;
+                do { x = getRandom(0, terrainCanvas.width); y = getRandom(0, terrainCanvas.height); }
+                while (elevationData[Math.floor(x)][Math.floor(y)] < waterLevel);
+                
+                const child = new Creature(x, y, childBrain, childGenes);
+                creatures.push(child);
+            }
+        }
+
+        function update() {
+            frameCount++;
+            updateAndDrawWeather();
+
+            if (Math.random() < plantSpawnRate) { /* ... */ }
+            for (let i = corpses.length - 1; i >= 0; i--) { /* ... */ }
+
+            const newCreatures = [];
+            for (let i = creatures.length - 1; i >= 0; i--) {
+                const creature = creatures[i];
+                if (!creature) continue;
+
+                creature.think(plants, creatures, corpses);
+                creature.move();
+                
+                if (creature.actionAttack > 0.8) { /* ... */ }
+                if (creature.actionMate > 0.8 && creature.energy >= reproductionEnergy && /*...*/) { /* ... */ }
+                if (creature.isPregnant) { /* ... */ }
+
+                if (creature.energy <= 0 || creature.thirst <= 0 || creature.health <= 0 || creature.lifespan > creature.phenotype.maxLifespan * lifespanMultiplier) {
+                    const summary = { name: creature.name, lifespan: creature.lifespan, diet: creature.phenotype.diet, finalSize: creature.phenotype.size.toFixed(2) };
+                    graveyard.push(summary);
+                    if (graveyard.length > 1000) graveyard.shift();
+                    
+                    const brainJSON = creature.brain.toJSON();
+                    const brainHash = simpleHash(JSON.stringify(brainJSON));
+                    const existingEntry = brainCache[brainHash];
+                    if (!existingEntry || existingEntry.score < creature.lifespan) {
+                        brainCache[brainHash] = {
+                            score: creature.lifespan,
+                            brain: brainJSON,
+                            genes: creature.genes
+                        };
+                    }
+                    
+                    corpses.push(new Corpse(creature));
+                    if (selectedCreature && selectedCreature.id === creature.id) { selectedCreature = null; statsPanel.style.display = 'none'; }
+                    creatures.splice(i, 1);
+                }
+            }
+            creatures.push(...newCreatures);
+            if (selectedCreature) updateStatsPanel(selectedCreature);
+            if (creatures.length === 0 && animationFrameId) genesis();
+            if (frameCount % 60 === 0) updateSidePanel();
+        }
+
+        // ... (draw, animate, updateStatsPanel, etc. are the same, but draw() will now draw weatherCanvas)
+        
+        function draw() {
+            ctx.save();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(camera.x, camera.y);
+            ctx.scale(camera.zoom, camera.zoom);
+
+            ctx.drawImage(terrainCanvas, 0, 0);
+            if (showWeather) {
+                ctx.drawImage(weatherCanvas, 0, 0);
+            }
+            
+            corpses.forEach(c => c.draw());
+            creatures.forEach(c => c.draw());
+            plants.forEach(p => p.draw());
+
+            if (selectedCreature) { /* ... */ }
+
+            ctx.restore();
+        }
+
+        // --- Save & Load Functionality ---
+        function showModal(title, body) {
+            modalTitle.textContent = title;
+            modalBody.innerHTML = body;
+            modalContainer.style.display = 'flex';
+        }
+
+        function getRecentBins() {
+            return JSON.parse(localStorage.getItem('recentBins') || '[]');
+        }
+
+        function addRecentBin(binId) {
+            let bins = getRecentBins();
+            bins = [binId, ...bins.filter(id => id !== binId)];
+            localStorage.setItem('recentBins', JSON.stringify(bins.slice(0, 5)));
+            updateRecentBinsUI();
+        }
+        
+        function updateRecentBinsUI() {
+            const recentBinsList = document.querySelector('#recentBinsList');
+            if(!recentBinsList) return;
+            const bins = getRecentBins();
+            if (bins.length === 0) {
+                recentBinsList.innerHTML = '<p class="text-sm text-gray-500">No recent saves.</p>';
+            } else {
+                recentBinsList.innerHTML = bins.map(binId => 
+                    `<div class="recent-bin-item" data-bin-id="${binId}" title="Load ${binId}">${binId}</div>`
+                ).join('');
+            }
+        }
+
+        async function saveSimulationState() {
+            if (!JSONBIN_API_KEY || JSONBIN_API_KEY.includes('...')) {
+                showModal('Error', 'Please add your JSONBin.io API key to the script to enable saving.');
+                return;
+            }
+            const wasRunning = !!animationFrameId;
+            if (wasRunning) document.getElementById('stopButton').click();
+            document.querySelector('#saveButton').textContent = 'Saving...';
+            document.querySelector('#saveButton').disabled = true;
+
+            brainCache = trimCache(brainCache, 5000, 0.2); 
+
+            const downsample = (data, factor) => {
+                const smallData = [];
+                for(let y = 0; y < data.length; y += factor) {
+                    const row = [];
+                    for(let x = 0; x < data[y].length; x += factor) {
+                        row.push(data[y][x]);
+                    }
+                    smallData.push(row);
+                }
+                return smallData;
+            }
+
+            const state = {
+                creatures: creatures.map(c => c.toJSON()),
+                plants, corpses, graveyard, frameCount, terrainSeed, weatherSeed, camera, brainCache,
+                mapSnapshot: {
+                    elevation: downsample(elevationData, 10),
+                    climate: downsample(climateData, 10),
+                    fertility: downsample(fertilityData, 10),
+                },
+                settings: { maxBrainComplexity, showVisionCones, showWeather, elitePoolSize, newPopulationSize, lifespanMultiplier, mutationRate, gestationPeriod, reproductionEnergy }
+            };
+            
+            const jsonString = JSON.stringify(state);
+            const sizeInKB = new Blob([jsonString]).size / 1024;
+
+            let endpoint, body, headers, binIdPrefix = "";
+
+            if (sizeInKB > 1024) { // Over 1MB, use XL Bins
+                endpoint = 'https://api.jsonbin.io/v3/xl/b';
+                const file = new File([jsonString], "state.json", {type: "application/json"});
+                const formData = new FormData();
+                formData.append('xlbin', file);
+                body = formData;
+                headers = { 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Name': `Ecosystem-XL-Save-${new Date().toISOString()}` };
+                binIdPrefix = "XL-";
+            } else if (sizeInKB < 10) { // Under 10KB, use standard Bins
+                endpoint = 'https://api.jsonbin.io/v3/b';
+                body = jsonString;
+                headers = { 'Content-Type': 'application/json', 'X-Master-Key': JSONBIN_API_KEY, 'X-Bin-Name': `Ecosystem-Save-${new Date().toISOString()}` };
+            } else {
+                showModal('Save Error', `Save file is ${sizeInKB.toFixed(0)} KB. This is too large for a standard bin (< 10 KB) but too small for an XL bin (> 1024 KB). Try letting the simulation run longer to accumulate more brain cache data.`);
+                document.querySelector('#saveButton').textContent = 'Save State';
+                document.querySelector('#saveButton').disabled = false;
+                if(wasRunning) document.getElementById('startButton').click();
+                return;
+            }
+
+            try {
+                const response = await fetch(endpoint, { method: 'POST', headers, body });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const result = await response.json();
+                const binId = binIdPrefix + result.metadata.id;
+                addRecentBin(binId);
+                showModal('Save Successful!', `
+                    <p>Your simulation state has been saved.</p>
+                    <p class="mt-2">Your Bin ID is:</p>
+                    <input type="text" readonly value="${binId}" class="w-full p-2 mt-1 bg-gray-100 border rounded">
+                `);
+            } catch (error) {
+                console.error("Save failed:", error);
+                showModal('Save Failed', `There was an error saving your simulation. See console for details.`);
+            } finally {
+                document.querySelector('#saveButton').textContent = 'Save State';
+                document.querySelector('#saveButton').disabled = false;
+                if (wasRunning) document.getElementById('startButton').click();
+            }
+        }
+
+        async function loadSimulationState(binId) {
+            if (!binId) { binId = prompt("Enter the Bin ID to load:"); }
+            if (!binId) return;
+             if (!JSONBIN_API_KEY || JSONBIN_API_KEY.includes('...')) {
+                showModal('Error', 'Please add your JSONBin.io API key to the script to enable loading.');
+                return;
+            }
+            
+            let isXL = false;
+            if (binId.startsWith("XL-")) {
+                isXL = true;
+                binId = binId.substring(3);
+            }
+            const endpoint = isXL ? `https://api.jsonbin.io/v3/xl/b/${binId}` : `https://api.jsonbin.io/v3/b/${binId}/latest`;
+            
+            document.querySelector('#loadButton').textContent = 'Loading...';
+            document.querySelector('#loadButton').disabled = true;
+            
+            try {
+                const response = await fetch(endpoint, { headers: { 'X-Master-Key': JSONBIN_API_KEY } });
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const state = await response.json();
+                
+                document.getElementById('stopButton').click();
+                
+                brainCache = state.brainCache || {};
+
+                generateTerrain(state.terrainSeed);
+                generateWeather(state.weatherSeed || state.terrainSeed + 3);
+
+                creatures = state.creatures.map(cData => Creature.fromJSON(cData));
+                plants = state.plants || [];
+                corpses = state.corpses || [];
+                graveyard = state.graveyard || [];
+                frameCount = state.frameCount || 0;
+                camera = state.camera || { x: 0, y: 0, zoom: 1 };
+
+                if (state.settings) {
+                    const updateSlider = (sliderId, valueId, variableName, value, textTransform = (v) => v) => {
+                         const slider = document.getElementById(sliderId);
+                         const valueDisplay = document.getElementById(valueId);
+                        if (value !== undefined && slider) {
+                            window[variableName] = value;
+                            slider.value = value;
+                            valueDisplay.textContent = textTransform(value);
+                        }
+                    };
+                    
+                    updateSlider('brainSlider', 'brainValue', 'maxBrainComplexity', state.settings.maxBrainComplexity);
+                    updateSlider('eliteSlider', 'eliteValue', 'elitePoolSize', state.settings.elitePoolSize);
+                    updateSlider('populationSlider', 'populationValue', 'newPopulationSize', state.settings.newPopulationSize);
+                    updateSlider('lifespanSlider', 'lifespanValue', 'lifespanMultiplier', state.settings.lifespanMultiplier, v => `${parseFloat(v).toFixed(1)}x`);
+                    updateSlider('mutationSlider', 'mutationValue', 'mutationRate', state.settings.mutationRate * 100, v => (v / 100).toFixed(2));
+                    updateSlider('gestationSlider', 'gestationValue', 'gestationPeriod', state.settings.gestationPeriod);
+                    updateSlider('reproductionEnergySlider', 'reproductionEnergyValue', 'reproductionEnergy', state.settings.reproductionEnergy);
+                    
+                    showVisionCones = state.settings.showVisionCones;
+                    document.getElementById('visionToggle').checked = showVisionCones;
+                    showWeather = state.settings.showWeather;
+                    document.getElementById('weatherToggle').checked = showWeather;
+                }
+                
+                selectedCreature = null;
+                statsPanel.style.display = 'none';
+                modalContainer.style.display = 'none';
+                
+                draw();
+                updateSidePanel();
+                addRecentBin((isXL ? "XL-" : "") + binId);
+
+            } catch (error) {
+                console.error("Load failed:", error);
+                showModal('Load Failed', `Could not load data for Bin ID: ${binId}. Check the ID and console for details.`);
+            } finally {
+                document.querySelector('#loadButton').textContent = 'Load State';
+                document.querySelector('#loadButton').disabled = false;
+            }
+        }
+        
+        // --- UI Creation ---
+        function createSettingsPanel() {
+             settingsContainer.innerHTML = `
+                <details open>
+                    <summary>Simulation</summary>
+                    <div class="setting-item">
+                         <label for="speedSlider" class="font-medium text-gray-700">Simulation Speed</label>
+                         <div class="flex items-center space-x-2">
+                             <input type="range" id="speedSlider" min="0" max="19" value="10" class="w-full">
+                             <span id="speedValue" class="font-mono text-gray-800 w-8 text-center">1.0</span>
+                         </div>
+                    </div>
+                    <div class="setting-item">
+                         <label class="flex items-center cursor-pointer">
+                             <span class="mr-3 font-medium text-gray-700">Show Vision Cones</span>
+                             <div class="relative">
+                                 <input type="checkbox" id="visionToggle" class="sr-only">
+                                 <div class="w-10 h-4 bg-gray-400 rounded-full shadow-inner"></div>
+                                 <div class="dot absolute w-6 h-6 bg-white rounded-full shadow -left-1 -top-1 transition"></div>
+                             </div>
+                         </label>
+                    </div>
+                     <div class="setting-item">
+                         <label class="flex items-center cursor-pointer">
+                             <span class="mr-3 font-medium text-gray-700">Show Weather</span>
+                             <div class="relative">
+                                 <input type="checkbox" id="weatherToggle" class="sr-only">
+                                 <div class="w-10 h-4 bg-gray-400 rounded-full shadow-inner"></div>
+                                 <div class="dot absolute w-6 h-6 bg-white rounded-full shadow -left-1 -top-1 transition"></div>
+                             </div>
+                         </label>
+                    </div>
+                </details>
+
+                <details open class="mt-4">
+                    <summary>Ecosystem Rules</summary>
+                    <div class="setting-item">
+                        <label for="lifespanSlider" class="font-medium text-gray-700">Lifespan Multiplier</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="lifespanSlider" min="1" max="5" value="1" step="0.5" class="w-full">
+                            <span id="lifespanValue" class="font-mono text-gray-800 w-10 text-center">1.0x</span>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="mutationSlider" class="font-medium text-gray-700">Mutation Rate</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="mutationSlider" min="0" max="100" value="20" step="1" class="w-full">
+                            <span id="mutationValue" class="font-mono text-gray-800 w-10 text-center">0.20</span>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="gestationSlider" class="font-medium text-gray-700">Gestation Period</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="gestationSlider" min="50" max="500" value="200" step="10" class="w-full">
+                            <span id="gestationValue" class="font-mono text-gray-800 w-10 text-center">200</span>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label for="reproductionEnergySlider" class="font-medium text-gray-700">Reproduction Energy</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="range" id="reproductionEnergySlider" min="50" max="100" value="80" step="5" class="w-full">
+                            <span id="reproductionEnergyValue" class="font-mono text-gray-800 w-10 text-center">80</span>
+                        </div>
+                    </div>
+                </details>
+                
+                <details open class="mt-4">
+                    <summary>Genesis Protocol</summary>
+                     <div class="setting-item">
+                         <label for="eliteSlider" class="font-medium text-gray-700">Elite Pool Size</label>
+                         <div class="flex items-center space-x-2">
+                             <input type="range" id="eliteSlider" min="2" max="50" value="10" step="1" class="w-full">
+                             <span id="eliteValue" class="font-mono text-gray-800 w-8 text-center">10</span>
+                         </div>
+                     </div>
+                     <div class="setting-item">
+                         <label for="populationSlider" class="font-medium text-gray-700">New Population Size</label>
+                         <div class="flex items-center space-x-2">
+                             <input type="range" id="populationSlider" min="10" max="200" value="100" step="10" class="w-full">
+                             <span id="populationValue" class="font-mono text-gray-800 w-8 text-center">100</span>
+                         </div>
+                     </div>
+                </details>
+
+                <details open class="mt-4">
+                     <summary>Save & Load</summary>
+                     <div class="flex space-x-2">
+                         <button id="saveButton" class="px-4 py-2 w-full bg-green-500 text-white font-semibold rounded-lg shadow-md hover:bg-green-600">Save</button>
+                         <button id="loadButton" class="px-4 py-2 w-full bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600">Load</button>
+                     </div>
+                     <div class="mt-2">
+                        <button id="previewButton" class="px-4 py-2 w-full bg-gray-500 text-white font-semibold rounded-lg shadow-md hover:bg-gray-600">Preview State</button>
+                     </div>
+                     <div id="recentBinsContainer" class="mt-4">
+                         <h4 class="font-medium text-gray-700 mb-2">Recent Saves</h4>
+                         <div id="recentBinsList"></div>
+                     </div>
+                </details>
+            `;
+            
+            document.getElementById('speedSlider').addEventListener('input', (e) => {
+                simulationSpeed = mapSliderValueToSpeed(e.target.value);
+                document.getElementById('speedValue').textContent = simulationSpeed.toFixed(1);
+            });
+            document.getElementById('brainSlider').addEventListener('input', (e) => {
+                maxBrainComplexity = parseInt(e.target.value);
+                document.getElementById('brainValue').textContent = maxBrainComplexity;
+            });
+            document.getElementById('visionToggle').addEventListener('change', (e) => {
+                showVisionCones = e.target.checked;
+                if (!animationFrameId) draw();
+            });
+             document.getElementById('weatherToggle').addEventListener('change', (e) => {
+                showWeather = e.target.checked;
+            });
+            document.getElementById('eliteSlider').addEventListener('input', (e) => {
+                elitePoolSize = parseInt(e.target.value);
+                document.getElementById('eliteValue').textContent = elitePoolSize;
+            });
+            document.getElementById('populationSlider').addEventListener('input', (e) => {
+                newPopulationSize = parseInt(e.target.value);
+                document.getElementById('populationValue').textContent = newPopulationSize;
+            });
+            document.getElementById('lifespanSlider').addEventListener('input', (e) => {
+                lifespanMultiplier = parseFloat(e.target.value);
+                document.getElementById('lifespanValue').textContent = `${lifespanMultiplier.toFixed(1)}x`;
+            });
+            document.getElementById('mutationSlider').addEventListener('input', (e) => {
+                mutationRate = parseInt(e.target.value) / 100;
+                document.getElementById('mutationValue').textContent = mutationRate.toFixed(2);
+            });
+            document.getElementById('gestationSlider').addEventListener('input', (e) => {
+                gestationPeriod = parseInt(e.target.value);
+                document.getElementById('gestationValue').textContent = gestationPeriod;
+            });
+            document.getElementById('reproductionEnergySlider').addEventListener('input', (e) => {
+                reproductionEnergy = parseInt(e.target.value);
+                document.getElementById('reproductionEnergyValue').textContent = reproductionEnergy;
+            });
+            document.getElementById('saveButton').addEventListener('click', saveSimulationState);
+            document.getElementById('loadButton').addEventListener('click', () => showLoadModal());
+            document.getElementById('previewButton').addEventListener('click', () => {
+                const wasRunning = !!animationFrameId;
+                if (wasRunning) document.getElementById('stopButton').click();
+                const state = {
+                    creatures: creatures.map(c => c.toJSON()),
+                    plants, corpses, graveyard, frameCount, terrainSeed, camera,
+                    settings: { maxBrainComplexity, showVisionCones, elitePoolSize, newPopulationSize, lifespanMultiplier, mutationRate, gestationPeriod, reproductionEnergy }
+                };
+                const jsonStringForSize = JSON.stringify(state);
+                const sizeInBytes = new Blob([jsonStringForSize]).size;
+                const sizeInKB = (sizeInBytes / 1024).toFixed(2);
+                const formattedJsonString = JSON.stringify(state, null, 2);
+                const sizeColor = sizeInKB > 10 ? 'text-red-600 font-bold' : 'text-green-600 font-bold';
+                const modalBodyContent = `
+                    <p class="mb-2">
+                        <strong>Estimated Size:</strong> 
+                        <span class="${sizeColor}">${sizeInKB} KB</span> / 10 KB Free Limit
+                    </p>
+                    <textarea readonly class="w-full h-64 p-2 mt-1 bg-gray-100 border rounded font-mono text-xs">${formattedJsonString}</textarea>
+                `;
+                showModal('Simulation State Preview', modalBodyContent);
+                if (wasRunning) document.getElementById('startButton').click();
+            });
+            document.querySelector('#recentBinsList').addEventListener('click', (e) => {
+                if (e.target && e.target.matches('.recent-bin-item')) {
+                    const binId = e.target.dataset.binId;
+                    loadSimulationState(binId);
+                }
+            });
+            updateRecentBinsUI();
+        }
+
+        // --- Initial Setup ---
+        async function setup() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            await fillNameCache();
+            createSettingsPanel();
+            generateTerrain();
+            resetCamera();
+            init();
+            draw();
+            updateSidePanel();
+        }
+        setup();
+    </script>
+</body>
+</html>

@@ -1,0 +1,329 @@
+<script setup lang="ts">
+import { onMounted, onBeforeUnmount, shallowRef, watch, ref, nextTick, computed } from 'vue'
+
+// Minimal stacked area for uPlot. We compute cumulative series from input y-series.
+interface Props {
+  // data: [x[], y1[], y2[], ...]
+  data: number[][]
+  colors?: string[] // colors per y-series
+  fillOpacity?: number // 0..1
+  epsilonFloor?: number // visual-only minimum height when all series are 0 at a sample
+  class?: string
+}
+const props = defineProps<Props>()
+
+const rootEl = ref<HTMLDivElement | null>(null)
+let uplotMod: any = null
+const chart = shallowRef<any>(null)
+let ro: ResizeObserver | null = null
+let currentSeriesCount = 0
+let lastROWidth = 0
+let lastROHeight = 0
+let roScheduled = false
+let observedEl: Element | null = null
+let fixedHeight = 0
+
+function toRgba(hex: string, alpha: number): string {
+  // supports '#rgb' or '#rrggbb'
+  let h = hex.replace('#', '')
+  if (h.length === 3)
+    h = h
+      .split('')
+      .map((ch) => ch + ch)
+      .join('')
+  const r = parseInt(h.slice(0, 2), 16) || 0
+  const g = parseInt(h.slice(2, 4), 16) || 0
+  const b = parseInt(h.slice(4, 6), 16) || 0
+  const a = Math.max(0, Math.min(1, alpha))
+  return `rgba(${r}, ${g}, ${b}, ${a})`
+}
+
+const cumulativeData = computed(() => {
+  const d = props.data || []
+  if (!d.length) return d
+  const x = d[0] || []
+  const ys = d.slice(1)
+  const cum: number[][] = ys.map((arr) => arr.slice())
+  for (let i = 0; i < x.length; i++) {
+    let run = 0
+    for (let s = 0; s < ys.length; s++) {
+      run += ys[s]?.[i] ?? 0
+      cum[s][i] = run
+    }
+  }
+  return [x, ...cum]
+})
+
+// Visual-only adjustment: if all series are zero at a given x, raise the top stack to epsilon
+const displayData = computed(() => {
+  const d = cumulativeData.value
+  if (!isValidData(d)) return d
+  const eps = Math.max(0, props.epsilonFloor ?? 0)
+  if (eps === 0) return d
+  const x = d[0]
+  const ys = d.slice(1).map((arr) => arr.slice())
+  const top = ys.length - 1
+  for (let i = 0; i < x.length; i++) {
+    // cumulative top equals actual sum; if 0, bump it to eps
+    if ((ys[top]?.[i] ?? 0) === 0) {
+      if (top >= 0) ys[top][i] = eps
+    }
+  }
+  return [x, ...ys]
+})
+
+function isValidData(d: any): d is number[][] {
+  return (
+    Array.isArray(d) &&
+    d.length >= 2 &&
+    d.every((a) => Array.isArray(a)) &&
+    d.every((a) => a.length === d[0].length)
+  )
+}
+
+// Detect if there's any visible data (any y > 0)
+const hasData = computed(() => {
+  const d = props.data || []
+  if (!d.length) return false
+  const ys = d.slice(1)
+  for (const arr of ys) {
+    if (Array.isArray(arr) && arr.some((v) => (v ?? 0) > 0)) return true
+  }
+  return false
+})
+
+// Simple debug values for the last sample of each series
+const lastValues = computed(() => {
+  const d = props.data || []
+  if (!Array.isArray(d) || d.length < 2) return null
+  const ys = d.slice(1)
+  const len = Math.max(0, ...ys.map((a) => (Array.isArray(a) ? a.length : 0)))
+  if (len === 0) return null
+  const vals = ys.map((a) => (Array.isArray(a) && a.length ? (a[a.length - 1] ?? 0) : 0))
+  return vals
+})
+
+async function createChart() {
+  if (!rootEl.value) return
+  // Destroy any existing chart before creating a new one to avoid duplicates
+  if (chart.value) {
+    try {
+      console.debug('[UPlotStackedArea] recreate -> destroying previous chart')
+    } catch {}
+    destroyChart()
+  }
+  if (!uplotMod) uplotMod = await import('uplot')
+  const UPlot = uplotMod.default || uplotMod
+  // Measure from the component root for width; height comes from fixedHeight (captured on mount)
+  const size = rootEl.value.getBoundingClientRect()
+  const colors =
+    props.colors && props.colors.length
+      ? props.colors
+      : ['#60a5fa', '#fbbf24', '#34d399', '#f472b6']
+  const fill = Math.max(0, Math.min(1, props.fillOpacity ?? 0.3))
+  const d = displayData.value
+  const yCount = isValidData(d) ? Math.max(0, d.length - 1) : 0
+  currentSeriesCount = yCount
+  const palette = colors.slice(0, yCount)
+  const series = [
+    {},
+    ...palette.map((c) => ({
+      stroke: c,
+      width: 1,
+      fill: toRgba(c, fill),
+      points: { show: true, size: 2 },
+    })),
+  ]
+  const baseOpts = {
+    width: Math.max(100, Math.floor(size.width || 400)),
+    height: Math.max(100, Math.floor(fixedHeight || size.height || 220)),
+    series,
+    // Disable interactivity to avoid extra event listeners from uPlot
+    cursor: { show: false },
+    legend: { show: false },
+    axes: [{ grid: { show: true } }, { grid: { show: true } }],
+    scales: {
+      x: { time: false },
+      y: {
+        auto: true,
+        // Ensure a non-degenerate range so lines/areas are always visible
+        range: (_u: any, min: number, max: number) => {
+          const lo = 0
+          const hi = Math.max(1, max, Number.isFinite(max) ? max : 0)
+          return [lo, hi * 1.05]
+        },
+      },
+    },
+    hooks: {
+      draw: [
+        (u: any) => {
+          // draw a faint zero-axis line if within current y-range
+          const y0 = 0
+          const yMin = u.scales.y.min
+          const yMax = u.scales.y.max
+          if (yMin <= y0 && y0 <= yMax) {
+            const ctx = u.ctx
+            const px = u.valToPos(y0, 'y', true)
+            ctx.save()
+            ctx.strokeStyle = 'rgba(0,0,0,0.25)'
+            ctx.lineWidth = 1
+            ctx.setLineDash([2, 3])
+            ctx.beginPath()
+            ctx.moveTo(u.bbox.left, px)
+            ctx.lineTo(u.bbox.left + u.bbox.width, px)
+            ctx.stroke()
+            ctx.restore()
+          }
+          try {
+            console.debug('[UPlotStackedArea] draw', {
+              bbox: u?.bbox,
+              yMin: u?.scales?.y?.min,
+              yMax: u?.scales?.y?.max,
+            })
+          } catch {}
+        },
+      ],
+    },
+    ...{},
+  }
+  rootEl.value.innerHTML = ''
+  const initData = isValidData(displayData.value) ? displayData.value : [[], []]
+  try {
+    console.debug('[UPlotStackedArea] init', {
+      rect: { w: size.width, h: size.height },
+      width: baseOpts.width,
+      height: baseOpts.height,
+      x: initData[0]?.length ?? 0,
+      ys: initData.length - 1,
+      valid: isValidData(initData),
+    })
+  } catch {}
+  chart.value = new UPlot(baseOpts, initData, rootEl.value)
+}
+
+function destroyChart() {
+  try {
+    chart.value?.destroy?.()
+  } catch {}
+  chart.value = null
+}
+
+onMounted(async () => {
+  await nextTick()
+  // Ensure the parent can position absolutely-positioned child when passed via class
+  if (rootEl.value) {
+    const parent = rootEl.value.parentElement
+    if (parent && getComputedStyle(parent).position === 'static') {
+      parent.style.position = 'relative'
+    }
+    // Allow external classes to control positioning/sizing (e.g., absolute inset-0)
+    rootEl.value.style.overflow = 'hidden'
+    // Capture wrapper height once; do not mutate heights to avoid feedback
+    if (parent) {
+      const rect = (parent as HTMLElement).getBoundingClientRect()
+      const cs = getComputedStyle(parent as HTMLElement)
+      const minH = parseFloat(cs.minHeight || '0') || 0
+      fixedHeight = Math.max(100, Math.floor(rect.height || minH || 220))
+      lastROHeight = fixedHeight
+      try {
+        console.debug('[UPlotStackedArea] fixed wrapper height', {
+          rectH: rect.height,
+          minH,
+          fixedHeight,
+        })
+      } catch {}
+    }
+  }
+  await createChart()
+  if (window && 'ResizeObserver' in window) {
+    ro = new ResizeObserver((entries: ResizeObserverEntry[]) => {
+      if (!rootEl.value || !chart.value) return
+      // Observe the parent container for width changes; height is fixed to initial wrapper height
+      const target: Element = (rootEl.value.parentElement as Element) || (rootEl.value as Element)
+      // Try to use the entry that corresponds to the target
+      const entry = entries.find((e) => e.target === target) || entries[0]
+      const cr = entry?.contentRect
+      const wBox = cr ? cr.width : Math.max(0, (target as HTMLElement).clientWidth)
+      const w = Math.max(120, Math.floor(wBox))
+      const h = Math.max(100, Math.floor(fixedHeight || 220))
+      // Guard against feedback loops: only setSize when size actually changed
+      if (w === lastROWidth && h === lastROHeight) return
+      lastROWidth = w
+      lastROHeight = h
+      if (roScheduled) return
+      roScheduled = true
+      requestAnimationFrame(() => {
+        roScheduled = false
+        try {
+          console.debug('[UPlotStackedArea] RO setSize', { w, h })
+          chart.value.setSize({ width: w, height: h })
+        } catch {}
+      })
+    })
+    // Observe parent instead of root to break the loop
+    const target: Element | null =
+      (rootEl.value?.parentElement as Element) || (rootEl.value as Element | null)
+    if (target) {
+      observedEl = target
+      ro.observe(target)
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  if (ro && observedEl) ro.unobserve(observedEl)
+  ro = null
+  destroyChart()
+})
+
+watch(
+  displayData,
+  (d) => {
+    const newCount = isValidData(d) ? Math.max(0, d.length - 1) : 0
+    const needsRecreate = !chart.value || newCount !== currentSeriesCount
+    try {
+      console.debug('[UPlotStackedArea] data changed', {
+        newCount,
+        currentSeriesCount,
+        needsRecreate,
+        valid: isValidData(d),
+        x: isValidData(d) ? d[0]?.length : 0,
+      })
+    } catch {}
+    if (needsRecreate) {
+      createChart()
+    } else if (chart.value && isValidData(d)) {
+      try {
+        console.debug('[UPlotStackedArea] update setData', {
+          x: d[0]?.length ?? 0,
+          ys: d.length - 1,
+        })
+        chart.value.setData(d)
+      } catch (e) {
+        try {
+          console.warn('[UPlotStackedArea] setData error', e)
+        } catch {}
+      }
+    }
+  },
+  { deep: true },
+)
+</script>
+
+<template>
+  <div ref="rootEl" class="relative w-full" :class="props.class">
+    <div
+      v-if="!hasData"
+      class="pointer-events-none absolute inset-0 flex items-center justify-center text-xs opacity-50 select-none"
+      aria-live="polite"
+    >
+      No data yet
+    </div>
+    <div
+      v-if="lastValues"
+      class="pointer-events-none absolute bottom-1 right-1 text-[10px] opacity-60 bg-base-200/60 px-1 rounded"
+    >
+      {{ lastValues.join(', ') }}
+    </div>
+  </div>
+</template>

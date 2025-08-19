@@ -1,0 +1,55 @@
+{
+  "name": "Zegion v1 (imagined)",
+  "architecture": [24, 16, 6],
+  "activations": {
+    "hidden": "relu",
+    "output": "tanh"
+  },
+  "inputs": [
+    { "key": "x_norm", "desc": "x / worldWidth (0..1)" },
+    { "key": "y_norm", "desc": "y / worldHeight (0..1)" },
+    { "key": "vel_x", "desc": "tanh(vx)" },
+    { "key": "vel_y", "desc": "tanh(vy)" },
+    { "key": "energy", "desc": "energy / 100 (0..1)" },
+    { "key": "health", "desc": "health / 100 (0..1)" },
+    { "key": "time_sin1", "desc": "sin(t * 0.01)" },
+    { "key": "time_cos1", "desc": "cos(t * 0.01)" },
+    { "key": "herb_dx", "desc": "dir x to nearest herbivore (unit)" },
+    { "key": "herb_dy", "desc": "dir y to nearest herbivore (unit)" },
+    { "key": "herb_dist", "desc": "norm dist to nearest herbivore (0..1)" },
+
+    { "key": "carn_dx", "desc": "dir x to nearest carnivore (unit)" },
+    { "key": "carn_dy", "desc": "dir y to nearest carnivore (unit)" },
+    { "key": "carn_dist", "desc": "norm dist to nearest carnivore (0..1)" },
+
+    { "key": "terrain_speed", "desc": "local terrain speed multiplier (~0.6..1.0)" },
+    { "key": "terrain_norm", "desc": "(terrain_speed-0.6)/0.4 (0..1)" },
+    { "key": "speed_mag", "desc": "tanh(hypot(vx,vy))" },
+    { "key": "dot_herb", "desc": "dot(vel, herb_dir)" },
+    { "key": "dot_carn", "desc": "dot(vel, carn_dir)" },
+
+    { "key": "time_sin2", "desc": "sin(t*0.37 + x*0.0007 + y*0.0009)" },
+    { "key": "time_cos2", "desc": "cos(t*0.41 - x*0.0006 + y*0.0011)" },
+    { "key": "diet_carnivore", "desc": "1 if carnivore else 0" },
+    { "key": "inv_energy", "desc": "1.0 - energy (0..1)" },
+    { "key": "bias", "desc": "constant 1.0" }
+  ],
+  "outputs": [
+    { "key": "steer_x", "desc": "tanh output controlling x-accel direction" },
+    { "key": "steer_y", "desc": "tanh output controlling y-accel direction" },
+    { "key": "accel_scale", "desc": "|tanh| multiplier for accel magnitude" },
+    { "key": "behavior_mod", "desc": "free channel reserved for behavior modulation" },
+    { "key": "eat_intent", "desc": "free channel reserved to bias toward food/feeding" },
+    { "key": "rest_intent", "desc": "free channel reserved for resting/regen" }
+  ],
+  "initialization": {
+    "type": "he_like",
+    "details": "weights ~ U(-1,1)*sqrt(2/nIn), biases = 0"
+  },
+  "scaling": {
+    "clamp_inputs": true,
+    "wrap_world": true,
+    "terrain_speed": "0.6 + noise*0.4"
+  },
+  "notes": "This is a clean JSON spec reflecting the imagined Zegion brain used in both WASM and JS fallback. Hidden=ReLU, Output=Tanh. First three outputs drive motion; last three are reserved for behaviors."
+}
