@@ -54,7 +54,7 @@ function hist(arr: number[], min: number, max: number, bins: number) {
 // Bar chart option: Eyes count distribution
 const eyesOption = computed(() => ({
   grid: { left: 30, right: 10, top: 20, bottom: 20 },
-  xAxis: { type: 'category', data: ['1','2','3','4','5','6'] },
+  xAxis: { type: 'category', data: ['1', '2', '3', '4', '5', '6'] },
   yAxis: { type: 'value', minInterval: 1 },
   legend: { show: false },
   series: [{ type: 'bar', data: countByEyes(eyesCounts.value), itemStyle: { color: '#60a5fa' } }],
@@ -71,11 +71,14 @@ const eyesOption = computed(() => ({
 
 // Sight histogram with selectable bin counts
 const sightBins = ref<number>(10)
-const sightMin = 20, sightMax = 200
+const sightMin = 20,
+  sightMax = 200
 const sightOption = computed(() => {
   const bins = sightBins.value
   const data = hist(sightRanges.value, sightMin, sightMax, bins)
-  const labels = Array.from({ length: bins }, (_, i) => Math.round(sightMin + (i + 0.5) * ((sightMax - sightMin) / bins)))
+  const labels = Array.from({ length: bins }, (_, i) =>
+    Math.round(sightMin + (i + 0.5) * ((sightMax - sightMin) / bins)),
+  )
   return {
     grid: { left: 30, right: 10, top: 20, bottom: 20 },
     xAxis: { type: 'category', data: labels },
@@ -115,17 +118,26 @@ const PREF_FOV = 'summary:gen-fov'
 const lastEyesFmt = computed(() => getLastExport(PREF_EYES))
 const lastSightFmt = computed(() => getLastExport(PREF_SIGHT))
 const lastFovFmt = computed(() => getLastExport(PREF_FOV))
-const prefEyes = computed({ get: () => getPreferredExport(PREF_EYES) ?? lastEyesFmt.value ?? 'png', set: (v: 'png' | 'csv') => setPreferredExport(PREF_EYES, v) })
-const prefSight = computed({ get: () => getPreferredExport(PREF_SIGHT) ?? lastSightFmt.value ?? 'png', set: (v: 'png' | 'csv') => setPreferredExport(PREF_SIGHT, v) })
-const prefFov = computed({ get: () => getPreferredExport(PREF_FOV) ?? lastFovFmt.value ?? 'png', set: (v: 'png' | 'csv') => setPreferredExport(PREF_FOV, v) })
+const prefEyes = computed({
+  get: () => getPreferredExport(PREF_EYES) ?? lastEyesFmt.value ?? 'png',
+  set: (v: 'png' | 'csv') => setPreferredExport(PREF_EYES, v),
+})
+const prefSight = computed({
+  get: () => getPreferredExport(PREF_SIGHT) ?? lastSightFmt.value ?? 'png',
+  set: (v: 'png' | 'csv') => setPreferredExport(PREF_SIGHT, v),
+})
+const prefFov = computed({
+  get: () => getPreferredExport(PREF_FOV) ?? lastFovFmt.value ?? 'png',
+  set: (v: 'png' | 'csv') => setPreferredExport(PREF_FOV, v),
+})
 
 // CSV/PNG exports for Eyes
 function exportEyesCsv() {
   setLastExport(PREF_EYES, 'csv')
   const counts = countByEyes(eyesCounts.value)
-  const rows = [['eyes','count']]
-  for (let i = 0; i < counts.length; i++) rows.push([`${i+1}`, `${counts[i]}`])
-  downloadText('genetics-eyes.csv', rows.map(r => r.join(',')).join('\n'))
+  const rows = [['eyes', 'count']]
+  for (let i = 0; i < counts.length; i++) rows.push([`${i + 1}`, `${counts[i]}`])
+  downloadText('genetics-eyes.csv', rows.map((r) => r.join(',')).join('\n'))
 }
 
 // CSV export respects current sightBins
@@ -133,10 +145,12 @@ function exportSightCsv() {
   setLastExport(PREF_SIGHT, 'csv')
   const bins = sightBins.value
   const data = hist(sightRanges.value, sightMin, sightMax, bins)
-  const labels = Array.from({ length: bins }, (_, i) => Math.round(sightMin + (i + 0.5) * ((sightMax - sightMin) / bins)))
-  const rows = [['sight_mid','count']]
+  const labels = Array.from({ length: bins }, (_, i) =>
+    Math.round(sightMin + (i + 0.5) * ((sightMax - sightMin) / bins)),
+  )
+  const rows = [['sight_mid', 'count']]
   for (let i = 0; i < data.length; i++) rows.push([`${labels[i]}`, `${data[i]}`])
-  downloadText('genetics-sight.csv', rows.map(r => r.join(',')).join('\n'))
+  downloadText('genetics-sight.csv', rows.map((r) => r.join(',')).join('\n'))
 }
 
 // CSV export respects current fovBins
@@ -144,10 +158,12 @@ function exportFovCsv() {
   setLastExport(PREF_FOV, 'csv')
   const bins = fovBins.value
   const data = hist(fovs.value, fovMin, fovMax, bins)
-  const labels = Array.from({ length: bins }, (_, i) => Math.round(fovMin + (i + 0.5) * ((fovMax - fovMin) / bins)))
-  const rows = [['fov_mid_deg','count']]
+  const labels = Array.from({ length: bins }, (_, i) =>
+    Math.round(fovMin + (i + 0.5) * ((fovMax - fovMin) / bins)),
+  )
+  const rows = [['fov_mid_deg', 'count']]
   for (let i = 0; i < data.length; i++) rows.push([`${labels[i]}`, `${data[i]}`])
-  downloadText('genetics-fov.csv', rows.map(r => r.join(',')).join('\n'))
+  downloadText('genetics-fov.csv', rows.map((r) => r.join(',')).join('\n'))
 }
 
 // PNG exports via EChart refs
@@ -184,13 +200,18 @@ function exportFovUsingPreferred() {
 }
 
 // Small helpers for header summary stats
-const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + (Number(b) || 0), 0) / arr.length : 0)
+const avg = (arr: number[]) =>
+  arr.length ? arr.reduce((a, b) => a + (Number(b) || 0), 0) / arr.length : 0
 function modeEyes(arr: number[]) {
   const counts = new Map<number, number>()
   for (const v of arr) counts.set(v, (counts.get(v) || 0) + 1)
-  let best = 2, bestC = -1
+  let best = 2,
+    bestC = -1
   for (const [k, c] of counts) {
-    if (c > bestC || (c === bestC && k < best)) { best = k; bestC = c }
+    if (c > bestC || (c === bestC && k < best)) {
+      best = k
+      bestC = c
+    }
   }
   return best
 }
@@ -200,7 +221,14 @@ const avgFov = computed(() => avg(fovs.value))
 const modeEyesCount = computed(() => modeEyes(eyesCounts.value))
 
 // Hall of Fame summary (top creatures this generation)
-type HofRow = { id: string; name?: string; lifespan?: number; eyes: number; sight: number; fov: number }
+type HofRow = {
+  id: string
+  name?: string
+  lifespan?: number
+  eyes: number
+  sight: number
+  fov: number
+}
 // Hall of Fame table mapped to genetic vision specs
 const hofTop = computed<HofRow[]>(() => {
   const list = (store.getHallOfFameTop?.(5) as any[]) ?? []
@@ -218,11 +246,14 @@ const hofTop = computed<HofRow[]>(() => {
 })
 
 const fovBins = ref<number>(9)
-const fovMin = 60, fovMax = 300
+const fovMin = 60,
+  fovMax = 300
 const fovOption = computed(() => {
   const bins = fovBins.value
   const data = hist(fovs.value, fovMin, fovMax, bins)
-  const labels = Array.from({ length: bins }, (_, i) => Math.round(fovMin + (i + 0.5) * ((fovMax - fovMin) / bins)))
+  const labels = Array.from({ length: bins }, (_, i) =>
+    Math.round(fovMin + (i + 0.5) * ((fovMax - fovMin) / bins)),
+  )
   return {
     grid: { left: 30, right: 10, top: 20, bottom: 20 },
     xAxis: { type: 'category', data: labels },
@@ -242,10 +273,15 @@ const fovOption = computed(() => {
 })
 </script>
 <template>
-  <div class="card bg-base-100 border p-3 h-64" role="region" aria-label="Genetics and Brains summary">
+  <div
+    class="card bg-base-100 border p-3 h-64"
+    role="region"
+    aria-label="Genetics and Brains summary"
+  >
     <div class="font-semibold mb-2">Genetics & Brains</div>
     <div class="text-[11px] md:text-xs opacity-80 mb-1" role="note" aria-live="polite">
-      Avg Eyes: {{ avgEyes.toFixed(2) }} · Most Common: {{ modeEyesCount }} · Avg Sight: {{ avgSight.toFixed(0) }} · Avg FOV: {{ avgFov.toFixed(0) }}°
+      Avg Eyes: {{ avgEyes.toFixed(2) }} · Most Common: {{ modeEyesCount }} · Avg Sight:
+      {{ avgSight.toFixed(0) }} · Avg FOV: {{ avgFov.toFixed(0) }}°
     </div>
     <div class="grid grid-cols-3 gap-2 h-full">
       <div class="bg-base-200/30 rounded-md p-2" role="group" aria-label="Eyes count histogram">
@@ -253,12 +289,30 @@ const fovOption = computed(() => {
           <div id="gen-eyes-desc" class="text-[10px] opacity-60">Eyes Count</div>
           <div class="flex gap-1 items-center">
             <label for="gen-eyes-pref" class="sr-only">Preferred export format</label>
-            <select id="gen-eyes-pref" v-model="prefEyes" class="select select-ghost select-xs" aria-label="Preferred export format">
+            <select
+              id="gen-eyes-pref"
+              v-model="prefEyes"
+              class="select select-ghost select-xs"
+              aria-label="Preferred export format"
+            >
               <option value="png">PNG</option>
               <option value="csv">CSV</option>
             </select>
-            <button class="btn btn-primary btn-xs" @click="exportEyesUsingPreferred" aria-describedby="gen-eyes-desc" aria-label="Export using preferred format">Export</button>
-            <span v-if="lastEyesFmt" class="badge badge-ghost badge-xs" aria-live="polite" title="Last used export format">Last: {{ lastEyesFmt?.toUpperCase?.() }}</span>
+            <button
+              class="btn btn-primary btn-xs"
+              @click="exportEyesUsingPreferred"
+              aria-describedby="gen-eyes-desc"
+              aria-label="Export using preferred format"
+            >
+              Export
+            </button>
+            <span
+              v-if="lastEyesFmt"
+              class="badge badge-ghost badge-xs"
+              aria-live="polite"
+              title="Last used export format"
+              >Last: {{ lastEyesFmt?.toUpperCase?.() }}</span
+            >
           </div>
         </div>
         <EChart ref="chartEyesRef" class="w-full h-44" :option="eyesOption" />
@@ -268,18 +322,41 @@ const fovOption = computed(() => {
           <div id="gen-sight-desc" class="text-[10px] opacity-60">Sight Range</div>
           <div class="flex gap-1 items-center">
             <label for="gen-sight-bins" class="sr-only">Sight bins</label>
-            <select id="gen-sight-bins" v-model.number="sightBins" class="select select-ghost select-xs" aria-label="Sight histogram bins">
+            <select
+              id="gen-sight-bins"
+              v-model.number="sightBins"
+              class="select select-ghost select-xs"
+              aria-label="Sight histogram bins"
+            >
               <option :value="7">7 bins</option>
               <option :value="10">10 bins</option>
               <option :value="13">13 bins</option>
             </select>
             <label for="gen-sight-pref" class="sr-only">Preferred export format</label>
-            <select id="gen-sight-pref" v-model="prefSight" class="select select-ghost select-xs" aria-label="Preferred export format">
+            <select
+              id="gen-sight-pref"
+              v-model="prefSight"
+              class="select select-ghost select-xs"
+              aria-label="Preferred export format"
+            >
               <option value="png">PNG</option>
               <option value="csv">CSV</option>
             </select>
-            <button class="btn btn-primary btn-xs" @click="exportSightUsingPreferred" aria-describedby="gen-sight-desc" aria-label="Export using preferred format">Export</button>
-            <span v-if="lastSightFmt" class="badge badge-ghost badge-xs" aria-live="polite" title="Last used export format">Last: {{ lastSightFmt?.toUpperCase?.() }}</span>
+            <button
+              class="btn btn-primary btn-xs"
+              @click="exportSightUsingPreferred"
+              aria-describedby="gen-sight-desc"
+              aria-label="Export using preferred format"
+            >
+              Export
+            </button>
+            <span
+              v-if="lastSightFmt"
+              class="badge badge-ghost badge-xs"
+              aria-live="polite"
+              title="Last used export format"
+              >Last: {{ lastSightFmt?.toUpperCase?.() }}</span
+            >
           </div>
         </div>
         <EChart ref="chartSightRef" class="w-full h-44" :option="sightOption" />
@@ -289,18 +366,41 @@ const fovOption = computed(() => {
           <div id="gen-fov-desc" class="text-[10px] opacity-60">Field of View (deg)</div>
           <div class="flex gap-1 items-center">
             <label for="gen-fov-bins" class="sr-only">FOV bins</label>
-            <select id="gen-fov-bins" v-model.number="fovBins" class="select select-ghost select-xs" aria-label="FOV histogram bins">
+            <select
+              id="gen-fov-bins"
+              v-model.number="fovBins"
+              class="select select-ghost select-xs"
+              aria-label="FOV histogram bins"
+            >
               <option :value="7">7 bins</option>
               <option :value="9">9 bins</option>
               <option :value="13">13 bins</option>
             </select>
             <label for="gen-fov-pref" class="sr-only">Preferred export format</label>
-            <select id="gen-fov-pref" v-model="prefFov" class="select select-ghost select-xs" aria-label="Preferred export format">
+            <select
+              id="gen-fov-pref"
+              v-model="prefFov"
+              class="select select-ghost select-xs"
+              aria-label="Preferred export format"
+            >
               <option value="png">PNG</option>
               <option value="csv">CSV</option>
             </select>
-            <button class="btn btn-primary btn-xs" @click="exportFovUsingPreferred" aria-describedby="gen-fov-desc" aria-label="Export using preferred format">Export</button>
-            <span v-if="lastFovFmt" class="badge badge-ghost badge-xs" aria-live="polite" title="Last used export format">Last: {{ lastFovFmt?.toUpperCase?.() }}</span>
+            <button
+              class="btn btn-primary btn-xs"
+              @click="exportFovUsingPreferred"
+              aria-describedby="gen-fov-desc"
+              aria-label="Export using preferred format"
+            >
+              Export
+            </button>
+            <span
+              v-if="lastFovFmt"
+              class="badge badge-ghost badge-xs"
+              aria-live="polite"
+              title="Last used export format"
+              >Last: {{ lastFovFmt?.toUpperCase?.() }}</span
+            >
           </div>
         </div>
         <EChart ref="chartFovRef" class="w-full h-44" :option="fovOption" />

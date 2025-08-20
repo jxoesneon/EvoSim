@@ -36,14 +36,13 @@ const seriesDefs = [
 
 const timelineOption = computed(() => {
   const ev = events.value as any
-  const dataSeries = seriesDefs
-    .map((s) => ({
-      name: s.name,
-      type: 'line',
-      symbol: 'none',
-      smooth: true,
-      data: diff(ev?.[s.key] ?? []),
-    }))
+  const dataSeries = seriesDefs.map((s) => ({
+    name: s.name,
+    type: 'line',
+    symbol: 'none',
+    smooth: true,
+    data: diff(ev?.[s.key] ?? []),
+  }))
 
   return {
     tooltip: { trigger: 'axis' },
@@ -79,15 +78,15 @@ function downloadText(filename: string, text: string) {
 function exportEventsCsv() {
   setLastExport(PREF_KEY, 'csv')
   const ev = events.value as any
-  const cols = ['tick', ...seriesDefs.map(s => s.key)]
-  const arrays: number[][] = seriesDefs.map(s => diff(ev?.[s.key] ?? []))
-  const n = Math.max(0, ...arrays.map(a => a.length))
+  const cols = ['tick', ...seriesDefs.map((s) => s.key)]
+  const arrays: number[][] = seriesDefs.map((s) => diff(ev?.[s.key] ?? []))
+  const n = Math.max(0, ...arrays.map((a) => a.length))
   const rows: string[][] = [cols]
   for (let i = 0; i < n; i++) {
-    const row = [String(i), ...arrays.map(a => String(a[i] ?? 0))]
+    const row = [String(i), ...arrays.map((a) => String(a[i] ?? 0))]
     rows.push(row)
   }
-  downloadText('behavior-events.csv', rows.map(r => r.join(',')).join('\n'))
+  downloadText('behavior-events.csv', rows.map((r) => r.join(',')).join('\n'))
 }
 
 function exportEventsPng() {
@@ -111,13 +110,20 @@ function exportUsingPreferred() {
       <div class="bg-base-200/30 rounded-md p-2 text-xs space-y-1 overflow-auto">
         <div class="font-medium opacity-70">Totals</div>
         <div class="grid grid-cols-2 gap-x-2 gap-y-1">
-          <div>Births</div><div class="text-right font-semibold">{{ totals.births ?? 0 }}</div>
-          <div>Deaths</div><div class="text-right font-semibold">{{ totals.deaths ?? 0 }}</div>
-          <div>Eats Plant</div><div class="text-right font-semibold">{{ totals.eats_plant ?? 0 }}</div>
-          <div>Eats Corpse</div><div class="text-right font-semibold">{{ totals.eats_corpse ?? 0 }}</div>
-          <div>Drinks</div><div class="text-right font-semibold">{{ totals.drinks ?? 0 }}</div>
-          <div>Attacks</div><div class="text-right font-semibold">{{ totals.attacks ?? 0 }}</div>
-          <div>Gets Hit</div><div class="text-right font-semibold">{{ totals.gets_hit ?? 0 }}</div>
+          <div>Births</div>
+          <div class="text-right font-semibold">{{ totals.births ?? 0 }}</div>
+          <div>Deaths</div>
+          <div class="text-right font-semibold">{{ totals.deaths ?? 0 }}</div>
+          <div>Eats Plant</div>
+          <div class="text-right font-semibold">{{ totals.eats_plant ?? 0 }}</div>
+          <div>Eats Corpse</div>
+          <div class="text-right font-semibold">{{ totals.eats_corpse ?? 0 }}</div>
+          <div>Drinks</div>
+          <div class="text-right font-semibold">{{ totals.drinks ?? 0 }}</div>
+          <div>Attacks</div>
+          <div class="text-right font-semibold">{{ totals.attacks ?? 0 }}</div>
+          <div>Gets Hit</div>
+          <div class="text-right font-semibold">{{ totals.gets_hit ?? 0 }}</div>
         </div>
       </div>
       <div class="bg-base-200/30 rounded-md overflow-hidden col-span-2">
@@ -125,12 +131,30 @@ function exportUsingPreferred() {
           <div id="events-chart-desc" class="text-[10px] opacity-60">Event Rates</div>
           <div class="flex gap-1 items-center">
             <label for="events-pref" class="sr-only">Preferred export format</label>
-            <select id="events-pref" v-model="preferred" class="select select-ghost select-xs" aria-label="Preferred export format">
+            <select
+              id="events-pref"
+              v-model="preferred"
+              class="select select-ghost select-xs"
+              aria-label="Preferred export format"
+            >
               <option value="png">PNG</option>
               <option value="csv">CSV</option>
             </select>
-            <button class="btn btn-primary btn-xs" @click="exportUsingPreferred" aria-describedby="events-chart-desc" aria-label="Export using preferred format">Export</button>
-            <span v-if="lastFmt" class="badge badge-ghost badge-xs" aria-live="polite" title="Last used export format">Last: {{ lastFmt?.toUpperCase?.() }}</span>
+            <button
+              class="btn btn-primary btn-xs"
+              @click="exportUsingPreferred"
+              aria-describedby="events-chart-desc"
+              aria-label="Export using preferred format"
+            >
+              Export
+            </button>
+            <span
+              v-if="lastFmt"
+              class="badge badge-ghost badge-xs"
+              aria-live="polite"
+              title="Last used export format"
+              >Last: {{ lastFmt?.toUpperCase?.() }}</span
+            >
           </div>
         </div>
         <EChart ref="chartRef" class="w-full h-[calc(100%-1.25rem)]" :option="timelineOption" />

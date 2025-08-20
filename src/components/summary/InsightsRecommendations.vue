@@ -61,8 +61,14 @@ const insights = computed(() => {
     <div class="font-semibold mb-2">Insights & Recommendations</div>
     <div class="space-y-2">
       <!-- Empty-state guidance -->
-      <div v-if="insights.length === 0" class="text-sm opacity-70">No insights yet. Let the simulation run…</div>
-      <div v-for="ins in insights" :key="ins.id" class="alert alert-info flex items-center justify-between">
+      <div v-if="insights.length === 0" class="text-sm opacity-70">
+        No insights yet. Let the simulation run…
+      </div>
+      <div
+        v-for="ins in insights"
+        :key="ins.id"
+        class="alert alert-info flex items-center justify-between"
+      >
         <!-- Each insight is descriptive text + an Apply button that calls its handler -->
         <div class="text-sm">{{ ins.text }}</div>
         <button class="btn btn-xs" @click="ins.apply">Apply</button>

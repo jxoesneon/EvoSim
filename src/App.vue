@@ -968,8 +968,10 @@ const showTelemetryOverlay = ref(false)
             </div>
           </div>
           <GeneralStats />
-          <h3 class="text-md font-bold mt-4 mb-2 border-b pb-1">Hall of Fame</h3>
-          <HallOfFame />
+          <div class="hof-container mt-4">
+            <h3 class="text-md font-bold mb-2 border-b pb-1">Hall of Fame</h3>
+            <HallOfFame />
+          </div>
         </div>
       </aside>
     </div>

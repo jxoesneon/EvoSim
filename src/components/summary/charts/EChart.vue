@@ -22,7 +22,9 @@ async function createChart() {
   if (!rootEl.value) return
   const echarts = await ensureLib()
   // dispose previous instance if any
-  try { chart.value?.dispose?.() } catch {}
+  try {
+    chart.value?.dispose?.()
+  } catch {}
   chart.value = echarts.init(rootEl.value)
   if (props.option) chart.value.setOption(props.option, true)
 }
@@ -34,7 +36,9 @@ onMounted(async () => {
     ro = new ResizeObserver(() => {
       const el = rootEl.value
       if (!el || !chart.value) return
-      try { chart.value.resize() } catch {}
+      try {
+        chart.value.resize()
+      } catch {}
     })
     if (rootEl.value) ro.observe(rootEl.value)
   }
@@ -43,28 +47,44 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (ro && rootEl.value) ro.unobserve(rootEl.value)
   ro = null
-  try { chart.value?.dispose?.() } catch {}
+  try {
+    chart.value?.dispose?.()
+  } catch {}
   chart.value = null
 })
 
-watch(() => props.option, (opt) => {
-  if (!chart.value) {
-    createChart()
-  } else if (opt) {
-    try { chart.value.setOption(opt, true) } catch {}
-  }
-}, { deep: true })
+watch(
+  () => props.option,
+  (opt) => {
+    if (!chart.value) {
+      createChart()
+    } else if (opt) {
+      try {
+        chart.value.setOption(opt, true)
+      } catch {}
+    }
+  },
+  { deep: true },
+)
 
 // Expose helpers for parent components (PNG export, instance access)
 function getInstance() {
   return chart.value
 }
 function getDataURL(options?: any) {
-  try { return chart.value?.getDataURL?.(options) } catch { return null }
+  try {
+    return chart.value?.getDataURL?.(options)
+  } catch {
+    return null
+  }
 }
 function downloadPNG(filename = 'chart.png') {
   try {
-    const url = chart.value?.getDataURL?.({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' })
+    const url = chart.value?.getDataURL?.({
+      type: 'png',
+      pixelRatio: 2,
+      backgroundColor: '#ffffff',
+    })
     if (!url) return
     const a = document.createElement('a')
     a.href = url

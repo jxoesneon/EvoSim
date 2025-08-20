@@ -2,7 +2,14 @@
 import { computed, defineEmits } from 'vue'
 import { useSimulationStore } from '../../composables/useSimulationStore'
 
-type HofEntry = { id: string; name?: string; lifespan?: number; [k: string]: any }
+type HofEntry = {
+  id: string
+  liveId?: string
+  name?: string
+  lifespan?: number
+  gen?: number
+  [k: string]: any
+}
 const store = useSimulationStore()
 const emit = defineEmits<{
   (e: 'focus', id: string): void
@@ -20,23 +27,26 @@ function colorFromId(id: string): string {
   return `hsl(${hue} 70% 55%)`
 }
 
-function getAvatarColor(id: string): string {
-  const c = (store.creatures as any).value?.find((x: any) => x.id === id)
+function getAvatarColor(entry: HofEntry): string {
+  const liveId = entry.liveId ?? entry.id
+  const c = (store.creatures as any).value?.find((x: any) => x.id === liveId)
   if (c?.communicationColor) {
     const { r, g, b } = c.communicationColor
     return `rgb(${r}, ${g}, ${b})`
   }
-  return colorFromId(id)
+  // fall back to stable color based on brain-hash id to remain consistent across gens
+  return colorFromId(entry.id)
 }
 
-function onFocus(id: string) {
+function onFocus(entry: HofEntry) {
+  const liveId = entry.liveId ?? entry.id
   try {
-    if (store.setSelectedCreature) store.setSelectedCreature(id)
+    if (store.setSelectedCreature) store.setSelectedCreature(liveId)
     // Try to center camera on current position if creature still exists
-    const c = (store.creatures as any).value?.find((x: any) => x.id === id)
+    const c = (store.creatures as any).value?.find((x: any) => x.id === liveId)
     if (c && store.centerCameraOn) store.centerCameraOn(c.x, c.y)
   } finally {
-    emit('focus', id)
+    emit('focus', liveId)
   }
 }
 
@@ -66,14 +76,22 @@ function onDetails(entry: HofEntry) {
         >
           <span
             class="inline-block w-3.5 h-3.5 rounded-full shrink-0 ring-1 ring-black/10"
-            :style="{ background: getAvatarColor(c.id) }"
+            :style="{ background: getAvatarColor(c) }"
             aria-hidden="true"
           />
           <span class="truncate">{{ c.name ?? c.id }}</span>
         </button>
         <div class="flex items-center gap-2">
-          <span class="badge badge-outline" :title="'Lifespan (ticks)'">life {{ c.lifespan ?? '—' }}</span>
-          <button class="btn btn-xs" @click="onFocus(c.id)" :title="'Focus'" aria-label="Focus creature">
+          <span class="badge badge-ghost" :title="'Generation'">Gen {{ c.gen ?? '—' }}</span>
+          <span class="badge badge-outline" :title="'Lifespan (ticks)'"
+            >life {{ c.lifespan ?? '—' }}</span
+          >
+          <button
+            class="btn btn-xs"
+            @click="onFocus(c)"
+            :title="'Focus'"
+            aria-label="Focus creature"
+          >
             Focus
           </button>
           <button class="btn btn-xs" @click="onStats(c)" :title="'Stats'" aria-label="Show stats">

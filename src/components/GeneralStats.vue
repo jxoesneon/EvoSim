@@ -83,8 +83,8 @@ function computeCardWidth(retries = 8) {
       // include horizontal padding (~1.5rem each side)
       maxW = Math.max(maxW, w + 48)
     }
-    const minPx = 192 // 12rem
-    const maxPx = 360 // 22.5rem clamp to avoid overly wide cards
+    const minPx = 100 // 12rem
+    const maxPx = 150 // 22.5rem clamp to avoid overly wide cards
     const clamped = Math.max(minPx, Math.min(maxW, maxPx))
     cardWidth.value = `${Math.ceil(clamped)}px`
   })
@@ -106,7 +106,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   resizeObs?.()
-  try { ro?.disconnect() } catch {}
+  try {
+    ro?.disconnect()
+  } catch {}
 })
 
 // Recompute when reactive stats change

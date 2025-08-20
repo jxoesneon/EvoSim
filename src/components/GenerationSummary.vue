@@ -54,21 +54,32 @@ function onStartNext() {
 <template>
   <!-- Generation Summary popup content -->
   <div class="space-y-4">
-    <div class="text-sm text-gray-600">Ended gen {{ genNumber }} due to <strong>{{ reason }}</strong>.</div>
+    <div class="text-sm text-gray-600">
+      Ended gen {{ genNumber }} due to <strong>{{ reason }}</strong
+      >.
+    </div>
 
     <div class="grid grid-cols-2 gap-3">
       <!-- Compact KPI cards (normalized to match other summary stats) -->
-      <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+      <div
+        class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+      >
         <div class="stat-title text-xs md:text-sm leading-tight">Avg Speed</div>
         <div class="flex flex-col gap-1">
           <div class="stat-value text-lg md:text-2xl leading-tight">{{ avgSpeed.toFixed(3) }}</div>
-          <div class="stat-desc text-[10px] md:text-xs">Threshold {{ movementThreshold.toFixed(3) }}</div>
+          <div class="stat-desc text-[10px] md:text-xs">
+            Threshold {{ movementThreshold.toFixed(3) }}
+          </div>
         </div>
       </div>
-      <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+      <div
+        class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+      >
         <div class="stat-title text-xs md:text-sm leading-tight">Plants</div>
         <div class="flex flex-col gap-1">
-          <div class="stat-value text-lg md:text-2xl leading-tight">Spawn {{ plantSpawnRate.toFixed(2) }}</div>
+          <div class="stat-value text-lg md:text-2xl leading-tight">
+            Spawn {{ plantSpawnRate.toFixed(2) }}
+          </div>
           <div class="stat-desc text-[10px] md:text-xs">Water {{ waterLevel.toFixed(2) }}</div>
         </div>
       </div>
@@ -93,28 +104,94 @@ function onStartNext() {
       <div class="collapse-content">
         <div class="grid grid-cols-2 gap-3 mt-2">
           <div>
-            <label class="label"><span class="label-text text-sm">Mutation Rate: {{ mutationRate.toFixed(2) }}</span></label>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="mutationRate" class="range range-sm" />
+            <label class="label"
+              ><span class="label-text text-sm"
+                >Mutation Rate: {{ mutationRate.toFixed(2) }}</span
+              ></label
+            >
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              v-model.number="mutationRate"
+              class="range range-sm"
+            />
           </div>
           <div>
-            <label class="label"><span class="label-text text-sm">Mutation Amount: {{ mutationAmount.toFixed(2) }}</span></label>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="mutationAmount" class="range range-sm" />
+            <label class="label"
+              ><span class="label-text text-sm"
+                >Mutation Amount: {{ mutationAmount.toFixed(2) }}</span
+              ></label
+            >
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              v-model.number="mutationAmount"
+              class="range range-sm"
+            />
           </div>
           <div>
-            <label class="label"><span class="label-text text-sm">Plant Spawn Rate: {{ plantSpawnRate.toFixed(2) }}</span></label>
-            <input type="range" min="0" max="5" step="0.1" v-model.number="plantSpawnRate" class="range range-sm" />
+            <label class="label"
+              ><span class="label-text text-sm"
+                >Plant Spawn Rate: {{ plantSpawnRate.toFixed(2) }}</span
+              ></label
+            >
+            <input
+              type="range"
+              min="0"
+              max="5"
+              step="0.1"
+              v-model.number="plantSpawnRate"
+              class="range range-sm"
+            />
           </div>
           <div>
-            <label class="label"><span class="label-text text-sm">Water Level: {{ waterLevel.toFixed(2) }}</span></label>
-            <input type="range" min="0" max="1" step="0.01" v-model.number="waterLevel" class="range range-sm" />
+            <label class="label"
+              ><span class="label-text text-sm"
+                >Water Level: {{ waterLevel.toFixed(2) }}</span
+              ></label
+            >
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              v-model.number="waterLevel"
+              class="range range-sm"
+            />
           </div>
           <div>
-            <label class="label"><span class="label-text text-sm">Movement Threshold: {{ movementThreshold.toFixed(3) }}</span></label>
-            <input type="range" min="0" max="0.2" step="0.005" v-model.number="movementThreshold" class="range range-sm" />
+            <label class="label"
+              ><span class="label-text text-sm"
+                >Movement Threshold: {{ movementThreshold.toFixed(3) }}</span
+              ></label
+            >
+            <input
+              type="range"
+              min="0"
+              max="0.2"
+              step="0.005"
+              v-model.number="movementThreshold"
+              class="range range-sm"
+            />
           </div>
           <div>
-            <label class="label"><span class="label-text text-sm">Stagnant Ticks Limit: {{ stagnantTicksLimit }}</span></label>
-            <input type="range" min="100" max="5000" step="50" v-model.number="stagnantTicksLimit" class="range range-sm" />
+            <label class="label"
+              ><span class="label-text text-sm"
+                >Stagnant Ticks Limit: {{ stagnantTicksLimit }}</span
+              ></label
+            >
+            <input
+              type="range"
+              min="100"
+              max="5000"
+              step="50"
+              v-model.number="stagnantTicksLimit"
+              class="range range-sm"
+            />
           </div>
         </div>
       </div>

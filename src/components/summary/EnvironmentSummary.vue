@@ -20,8 +20,12 @@ function fmtDelta(curr?: number, prev?: number) {
   return { text: `${sign > 0 ? '+' : '−'}${mag.toFixed(places)}`, sign }
 }
 
-const deltaPlantSpawn = computed(() => fmtDelta(params.value?.plantSpawnRate, prevParams.value?.plantSpawnRate))
-const deltaWaterLevel = computed(() => fmtDelta(params.value?.waterLevel, prevParams.value?.waterLevel))
+const deltaPlantSpawn = computed(() =>
+  fmtDelta(params.value?.plantSpawnRate, prevParams.value?.plantSpawnRate),
+)
+const deltaWaterLevel = computed(() =>
+  fmtDelta(params.value?.waterLevel, prevParams.value?.waterLevel),
+)
 
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 import { ref } from 'vue'
@@ -55,7 +59,7 @@ const envOption = computed(() => {
     xAxis: { type: 'category', data: envX.value },
     yAxis: [
       { type: 'value', name: 'Temp (C)' },
-      { type: 'value', name: 'Rel', min: 0, max: 1 }
+      { type: 'value', name: 'Rel', min: 0, max: 1 },
     ],
     series: [
       { name: 'Temp (C)', type: 'line', symbol: 'none', smooth: true, data: t, yAxisIndex: 0 },
@@ -131,9 +135,9 @@ function exportTempCsv() {
   const h: number[] = envSeries.value?.humidity01 ?? []
   const p: number[] = envSeries.value?.precipitation01 ?? []
   const n = Math.max(t.length, h.length, p.length)
-  const rows = [['tick','temperatureC','humidity01','precipitation01']]
+  const rows = [['tick', 'temperatureC', 'humidity01', 'precipitation01']]
   for (let i = 0; i < n; i++) rows.push([`${i}`, `${t[i] ?? ''}`, `${h[i] ?? ''}`, `${p[i] ?? ''}`])
-  const csv = rows.map(r => r.join(',')).join('\n')
+  const csv = rows.map((r) => r.join(',')).join('\n')
   downloadText('environment-temp.csv', csv)
 }
 
@@ -143,9 +147,10 @@ function exportUvCsv() {
   const vis: number[] = envSeries.value?.visibility01 ?? []
   const wind: number[] = envSeries.value?.windSpeed ?? []
   const n = Math.max(uv.length, vis.length, wind.length)
-  const rows = [['tick','uv01','visibility01','windSpeed']]
-  for (let i = 0; i < n; i++) rows.push([`${i}`, `${uv[i] ?? ''}`, `${vis[i] ?? ''}`, `${wind[i] ?? ''}`])
-  const csv = rows.map(r => r.join(',')).join('\n')
+  const rows = [['tick', 'uv01', 'visibility01', 'windSpeed']]
+  for (let i = 0; i < n; i++)
+    rows.push([`${i}`, `${uv[i] ?? ''}`, `${vis[i] ?? ''}`, `${wind[i] ?? ''}`])
+  const csv = rows.map((r) => r.join(',')).join('\n')
   downloadText('environment-uv-wind.csv', csv)
 }
 
@@ -179,21 +184,59 @@ function exportUvUsingPreferred() {
       <div class="stat bg-base-100 rounded-xl p-3 border">
         <div class="flex items-center justify-between">
           <div class="stat-title text-xs">Plant Spawn Rate</div>
-          <button class="btn btn-ghost btn-xs" @click="emit('edit','plantSpawnRate')" aria-label="Edit Plant Spawn Rate in Controls">Edit</button>
+          <button
+            class="btn btn-ghost btn-xs"
+            @click="emit('edit', 'plantSpawnRate')"
+            aria-label="Edit Plant Spawn Rate in Controls"
+          >
+            Edit
+          </button>
         </div>
         <div class="flex items-center gap-2">
           <div class="stat-value text-lg">{{ params.plantSpawnRate?.toFixed?.(2) ?? '—' }}</div>
-          <span v-if="deltaPlantSpawn" class="badge badge-sm" :class="deltaPlantSpawn.sign>0 ? 'badge-success' : deltaPlantSpawn.sign<0 ? 'badge-error' : 'badge-ghost'" :title="`Δ vs prev gen: ${deltaPlantSpawn.text}`" aria-live="polite">{{ deltaPlantSpawn.text }}</span>
+          <span
+            v-if="deltaPlantSpawn"
+            class="badge badge-sm"
+            :class="
+              deltaPlantSpawn.sign > 0
+                ? 'badge-success'
+                : deltaPlantSpawn.sign < 0
+                  ? 'badge-error'
+                  : 'badge-ghost'
+            "
+            :title="`Δ vs prev gen: ${deltaPlantSpawn.text}`"
+            aria-live="polite"
+            >{{ deltaPlantSpawn.text }}</span
+          >
         </div>
       </div>
       <div class="stat bg-base-100 rounded-xl p-3 border">
         <div class="flex items-center justify-between">
           <div class="stat-title text-xs">Water Level</div>
-          <button class="btn btn-ghost btn-xs" @click="emit('edit','waterLevel')" aria-label="Edit Water Level in Controls">Edit</button>
+          <button
+            class="btn btn-ghost btn-xs"
+            @click="emit('edit', 'waterLevel')"
+            aria-label="Edit Water Level in Controls"
+          >
+            Edit
+          </button>
         </div>
         <div class="flex items-center gap-2">
           <div class="stat-value text-lg">{{ params.waterLevel?.toFixed?.(2) ?? '—' }}</div>
-          <span v-if="deltaWaterLevel" class="badge badge-sm" :class="deltaWaterLevel.sign>0 ? 'badge-success' : deltaWaterLevel.sign<0 ? 'badge-error' : 'badge-ghost'" :title="`Δ vs prev gen: ${deltaWaterLevel.text}`" aria-live="polite">{{ deltaWaterLevel.text }}</span>
+          <span
+            v-if="deltaWaterLevel"
+            class="badge badge-sm"
+            :class="
+              deltaWaterLevel.sign > 0
+                ? 'badge-success'
+                : deltaWaterLevel.sign < 0
+                  ? 'badge-error'
+                  : 'badge-ghost'
+            "
+            :title="`Δ vs prev gen: ${deltaWaterLevel.text}`"
+            aria-live="polite"
+            >{{ deltaWaterLevel.text }}</span
+          >
         </div>
       </div>
       <div class="bg-base-200/30 rounded-xl p-2 border col-span-2 min-h-0 overflow-hidden">
@@ -201,12 +244,30 @@ function exportUvUsingPreferred() {
           <div id="env-temp-desc" class="text-xs opacity-70">Temp / Humidity / Precip</div>
           <div class="flex gap-1 items-center">
             <label for="env-temp-pref" class="sr-only">Preferred export format</label>
-            <select id="env-temp-pref" v-model="preferredTemp" class="select select-ghost select-xs" aria-label="Preferred export format">
+            <select
+              id="env-temp-pref"
+              v-model="preferredTemp"
+              class="select select-ghost select-xs"
+              aria-label="Preferred export format"
+            >
               <option value="png">PNG</option>
               <option value="csv">CSV</option>
             </select>
-            <button class="btn btn-primary btn-xs" @click="exportTempUsingPreferred" aria-describedby="env-temp-desc" aria-label="Export using preferred format">Export</button>
-            <span v-if="lastTempFmt" class="badge badge-ghost badge-xs" aria-live="polite" title="Last used export format">Last: {{ lastTempFmt?.toUpperCase?.() }}</span>
+            <button
+              class="btn btn-primary btn-xs"
+              @click="exportTempUsingPreferred"
+              aria-describedby="env-temp-desc"
+              aria-label="Export using preferred format"
+            >
+              Export
+            </button>
+            <span
+              v-if="lastTempFmt"
+              class="badge badge-ghost badge-xs"
+              aria-live="polite"
+              title="Last used export format"
+              >Last: {{ lastTempFmt?.toUpperCase?.() }}</span
+            >
           </div>
         </div>
         <EChart ref="chartTempRef" class="w-full h-32" :option="envOption" />
@@ -216,12 +277,30 @@ function exportUvUsingPreferred() {
           <div id="env-uv-desc" class="text-xs opacity-70">UV / Visibility / Wind</div>
           <div class="flex gap-1 items-center">
             <label for="env-uv-pref" class="sr-only">Preferred export format</label>
-            <select id="env-uv-pref" v-model="preferredUv" class="select select-ghost select-xs" aria-label="Preferred export format">
+            <select
+              id="env-uv-pref"
+              v-model="preferredUv"
+              class="select select-ghost select-xs"
+              aria-label="Preferred export format"
+            >
               <option value="png">PNG</option>
               <option value="csv">CSV</option>
             </select>
-            <button class="btn btn-primary btn-xs" @click="exportUvUsingPreferred" aria-describedby="env-uv-desc" aria-label="Export using preferred format">Export</button>
-            <span v-if="lastUvFmt" class="badge badge-ghost badge-xs" aria-live="polite" title="Last used export format">Last: {{ lastUvFmt?.toUpperCase?.() }}</span>
+            <button
+              class="btn btn-primary btn-xs"
+              @click="exportUvUsingPreferred"
+              aria-describedby="env-uv-desc"
+              aria-label="Export using preferred format"
+            >
+              Export
+            </button>
+            <span
+              v-if="lastUvFmt"
+              class="badge badge-ghost badge-xs"
+              aria-live="polite"
+              title="Last used export format"
+              >Last: {{ lastUvFmt?.toUpperCase?.() }}</span
+            >
           </div>
         </div>
         <EChart ref="chartUvRef" class="w-full h-32" :option="envOption2" />

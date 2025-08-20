@@ -29,12 +29,16 @@ vi.mock('../composables/useSimulationStore', () => {
       telemetry: {
         series: {
           environment: {
-            temperatureC: [20, 21], humidity01: [0.5, 0.6], precipitation01: [0.1, 0.2],
-            uv01: [0.2, 0.3], visibility01: [0.7, 0.8], windSpeed: [1.0, 1.1],
+            temperatureC: [20, 21],
+            humidity01: [0.5, 0.6],
+            precipitation01: [0.1, 0.2],
+            uv01: [0.2, 0.3],
+            visibility01: [0.7, 0.8],
+            windSpeed: [1.0, 1.1],
           },
           events: { births: [0], deaths: [0] },
           avgSpeed: [0.1, 0.2, 0.15],
-          population: { creatures: [1,2], plants: [3,2], corpses: [0,1] },
+          population: { creatures: [1, 2], plants: [3, 2], corpses: [0, 1] },
         },
       },
       creatures: [
@@ -49,8 +53,16 @@ vi.mock('../composables/useSimulationStore', () => {
 
 // Silence URL/Blob/anchor used by CSV/PNG triggers
 beforeAll(() => {
-  vi.stubGlobal('Blob', class { constructor(_parts: any[], _opts?: any) {} } as any)
-  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:url'), revokeObjectURL: vi.fn() } as any)
+  vi.stubGlobal(
+    'Blob',
+    class {
+      constructor(_parts: any[], _opts?: any) {}
+    } as any,
+  )
+  vi.stubGlobal('URL', {
+    createObjectURL: vi.fn(() => 'blob:url'),
+    revokeObjectURL: vi.fn(),
+  } as any)
   const origCreate = (document.createElement as any).bind(document) as typeof document.createElement
   ;(document as any).createElement = vi.fn((tag: string, options?: any) => {
     if (tag.toLowerCase() === 'a') {
@@ -79,7 +91,9 @@ async function selectAndExport(wrapper: any, selectId: string, fmt: 'png' | 'csv
   await sel.trigger('change')
   await nextTick()
   await nextTick()
-  const btn = wrapper.findAll('button').find((b: any) => b.attributes('aria-describedby') === descId)
+  const btn = wrapper
+    .findAll('button')
+    .find((b: any) => b.attributes('aria-describedby') === descId)
   await btn?.trigger('click')
 }
 
@@ -97,7 +111,9 @@ describe('Export preference persistence', () => {
   it('PopulationDynamics records last format for PNG and CSV', async () => {
     const w = mount(PopulationDynamics, { global: { stubs: { UPlotStackedArea: true } } })
     // Mock area chart root for PNG path
-    ;(w.vm as any).areaRef = { querySelector: () => ({ toDataURL: () => 'data:image/png;base64,' }) }
+    ;(w.vm as any).areaRef = {
+      querySelector: () => ({ toDataURL: () => 'data:image/png;base64,' }),
+    }
     await selectAndExport(w, 'pop-pref', 'png', 'pop-chart-desc')
     await selectAndExport(w, 'pop-pref', 'csv', 'pop-chart-desc')
     expect(setLastExportSpy).toHaveBeenCalledWith('summary:population-dynamics', 'png')
@@ -131,8 +147,12 @@ describe('Export preference persistence', () => {
   it('MovementActivity records histogram and line preferences', async () => {
     const w = mount(MovementActivity, { global: { stubs: { UPlotLine: true } } })
     // Stub PNG paths to avoid DOM access while still recording last export
-    ;(w.vm as any).downloadHistPng = () => { setLastExportSpy('summary:move-hist', 'png') }
-    ;(w.vm as any).downloadLinePng = () => { setLastExportSpy('summary:move-line', 'png') }
+    ;(w.vm as any).downloadHistPng = () => {
+      setLastExportSpy('summary:move-hist', 'png')
+    }
+    ;(w.vm as any).downloadLinePng = () => {
+      setLastExportSpy('summary:move-line', 'png')
+    }
     await selectAndExport(w, 'move-hist-pref', 'png', 'move-hist-desc')
     await selectAndExport(w, 'move-hist-pref', 'csv', 'move-hist-desc')
     await selectAndExport(w, 'move-line-pref', 'png', 'move-line-desc')

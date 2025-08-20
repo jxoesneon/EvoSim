@@ -23,8 +23,11 @@ async function createChart() {
   const baseOpts = {
     width: Math.max(100, Math.floor(size.width || 400)),
     height: Math.max(80, Math.floor(size.height || 200)),
-    series: (props.options?.series ?? []).length > 0 ? props.options.series : [{}, ...(props.data?.slice(1) || []).map(() => ({}))],
-    axes: props.options?.axes ?? [ {}, {} ],
+    series:
+      (props.options?.series ?? []).length > 0
+        ? props.options.series
+        : [{}, ...(props.data?.slice(1) || []).map(() => ({}))],
+    axes: props.options?.axes ?? [{}, {}],
     ...props.options,
   }
   // Ensure container is empty
@@ -33,7 +36,9 @@ async function createChart() {
 }
 
 function destroyChart() {
-  try { chart.value?.destroy?.() } catch {}
+  try {
+    chart.value?.destroy?.()
+  } catch {}
   chart.value = null
 }
 
@@ -46,7 +51,9 @@ onMounted(async () => {
       const el = rootEl.value
       if (!el || !chart.value) return
       const rect = el.getBoundingClientRect()
-      try { chart.value.setSize({ width: Math.max(100, rect.width), height: Math.max(80, rect.height) }) } catch {}
+      try {
+        chart.value.setSize({ width: Math.max(100, rect.width), height: Math.max(80, rect.height) })
+      } catch {}
     })
     if (rootEl.value) ro.observe(rootEl.value)
   }
@@ -58,19 +65,29 @@ onBeforeUnmount(() => {
   destroyChart()
 })
 
-watch(() => props.data, (d) => {
-  if (chart.value && d) {
-    try { chart.value.setData(d) } catch {}
-  } else {
-    createChart()
-  }
-}, { deep: true })
+watch(
+  () => props.data,
+  (d) => {
+    if (chart.value && d) {
+      try {
+        chart.value.setData(d)
+      } catch {}
+    } else {
+      createChart()
+    }
+  },
+  { deep: true },
+)
 
-watch(() => props.options, () => {
-  // Recreate to apply structural option changes
-  destroyChart()
-  createChart()
-}, { deep: true })
+watch(
+  () => props.options,
+  () => {
+    // Recreate to apply structural option changes
+    destroyChart()
+    createChart()
+  },
+  { deep: true },
+)
 </script>
 
 <template>

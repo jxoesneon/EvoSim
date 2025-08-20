@@ -94,24 +94,54 @@ function pct(n: any): string {
         </div>
         <div class="col-span-2 text-white/70">env comp maxΔ%:</div>
         <div class="col-span-2 grid grid-cols-5 gap-1 text-[10px]">
-          <div>swm: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envSwim) }}</span></div>
-          <div>wnd: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envWind) }}</span></div>
-          <div>cld: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envCold) }}</span></div>
-          <div>hot: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envHeat) }}</span></div>
-          <div>hum: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envHumid) }}</span></div>
-          <div>oxy: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envOxy) }}</span></div>
-          <div>noi: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envNoise) }}</span></div>
-          <div>dis: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envDisease) }}</span></div>
-          <div>loc: <span class="text-white">{{ pct(parity.env?.compMaxRel?.locomotion) }}</span></div>
+          <div>
+            swm: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envSwim) }}</span>
+          </div>
+          <div>
+            wnd: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envWind) }}</span>
+          </div>
+          <div>
+            cld: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envCold) }}</span>
+          </div>
+          <div>
+            hot: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envHeat) }}</span>
+          </div>
+          <div>
+            hum: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envHumid) }}</span>
+          </div>
+          <div>
+            oxy: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envOxy) }}</span>
+          </div>
+          <div>
+            noi: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envNoise) }}</span>
+          </div>
+          <div>
+            dis: <span class="text-white">{{ pct(parity.env?.compMaxRel?.envDisease) }}</span>
+          </div>
+          <div>
+            loc: <span class="text-white">{{ pct(parity.env?.compMaxRel?.locomotion) }}</span>
+          </div>
         </div>
         <div class="col-span-2 text-white/70 mt-1">corpse comp maxΔ%:</div>
         <div class="col-span-2 grid grid-cols-6 gap-1 text-[10px]">
-          <div>base: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.base) }}</span></div>
-          <div>temp: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.temp) }}</span></div>
-          <div>hum: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.humid) }}</span></div>
-          <div>rain: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.rain) }}</span></div>
-          <div>wet: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.wet) }}</span></div>
-          <div>tot: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.total) }}</span></div>
+          <div>
+            base: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.base) }}</span>
+          </div>
+          <div>
+            temp: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.temp) }}</span>
+          </div>
+          <div>
+            hum: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.humid) }}</span>
+          </div>
+          <div>
+            rain: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.rain) }}</span>
+          </div>
+          <div>
+            wet: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.wet) }}</span>
+          </div>
+          <div>
+            tot: <span class="text-white">{{ pct(parity.corpse?.compMaxRel?.total) }}</span>
+          </div>
         </div>
       </div>
     </div>

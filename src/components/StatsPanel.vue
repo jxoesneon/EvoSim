@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watchEffect, computed } from 'vue'
+import { ref, watchEffect, computed, onBeforeUnmount } from 'vue'
 import { useSimulationStore } from '../composables/useSimulationStore'
 
 const props = defineProps<{ creature?: Record<string, any> }>()
@@ -8,8 +8,132 @@ const emit = defineEmits(['close'])
 const activeTab = ref<'stats' | 'brain' | 'events'>('stats')
 const showInputs = ref(true)
 const showOutputs = ref(true)
+// Canvas rendering options
+const showConnections = ref(true)
 
 const store = useSimulationStore()
+
+// Pretty-print labels for UI: snake_case -> Title Case, handle common short tokens
+function prettyLabel(raw: string): string {
+  if (!raw) return ''
+  // Replace underscores with spaces and collapse whitespace
+  const spaced = String(raw).replace(/_/g, ' ').replace(/\s+/g, ' ').trim()
+  const mapToken = (t: string) => {
+    const low = t.toLowerCase()
+    if (low === 'vx') return 'VX'
+    if (low === 'vy') return 'VY'
+    if (low === 'dx') return 'DX'
+    if (low === 'dy') return 'DY'
+    if (low === 'uv') return 'UV'
+    if (low === 'id') return 'ID'
+    if (/^v\d+$/.test(low)) return low.toUpperCase() // v1, v2
+    // Title-case default
+    return low.charAt(0).toUpperCase() + low.slice(1)
+  }
+  return spaced
+    .split(' ')
+    .map(mapToken)
+    .join(' ')
+}
+
+// Pull stable input metadata (labels + categories) from the store
+type InputCategory = 'Internal' | 'External'
+const inputMetaList = computed(() => {
+  const brain = props.creature?.brain as any | undefined
+  const total =
+    (Array.isArray(brain?.inputs) ? brain.inputs.length : 0) ||
+    (typeof brain?.inputNodes === 'number' ? brain.inputNodes : 0) ||
+    (Array.isArray(brain?.layerSizes) ? Number(brain.layerSizes[0] || 0) : 0)
+  if (!total) return [] as Array<{ idx: number; label: string; category: InputCategory }>
+  return store.getInputMeta(total) as Array<{ idx: number; label: string; category: InputCategory }>
+})
+
+const labelByIdx = computed<Record<number, string>>(() => {
+  const map: Record<number, string> = {}
+  for (const m of inputMetaList.value) map[m.idx] = m.label
+  return map
+})
+
+// Human-readable display labels (no underscores, Title Case)
+const displayLabelByIdx = computed<Record<number, string>>(() => {
+  const map: Record<number, string> = {}
+  for (const m of inputMetaList.value) map[m.idx] = prettyLabel(m.label)
+  return map
+})
+
+const internalInputIndices = computed(() =>
+  inputMetaList.value.filter((m) => m.category === 'Internal').map((m) => m.idx),
+)
+const externalInputIndices = computed(() =>
+  inputMetaList.value.filter((m) => m.category === 'External').map((m) => m.idx),
+)
+
+// Tooltip state for input node hover
+const tooltip = ref<{ show: boolean; x: number; y: number; text: string }>({
+  show: false,
+  x: 0,
+  y: 0,
+  text: '',
+})
+
+// Keep last drawn input node hitboxes to support hover detection
+let inputHitboxes: Array<{
+  x: number
+  y: number
+  r: number
+  label: string
+  value: number
+  category: InputCategory
+}> = []
+let hoverBound = false
+let mouseMoveHandler: ((e: MouseEvent) => void) | null = null
+let mouseLeaveHandler: ((e: MouseEvent) => void) | null = null
+
+function bindCanvasHover() {
+  if (hoverBound) return
+  const canvas = document.getElementById('brainCanvas') as HTMLCanvasElement | null
+  if (!canvas) return
+  const rectAt = () => canvas.getBoundingClientRect()
+  mouseMoveHandler = (e: MouseEvent) => {
+    const rect = rectAt()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    let found = null as (typeof inputHitboxes)[number] | null
+    for (const hb of inputHitboxes) {
+      const dx = x - hb.x
+      const dy = y - hb.y
+      if (dx * dx + dy * dy <= (hb.r + 3) * (hb.r + 3)) {
+        found = hb
+        break
+      }
+    }
+    if (found) {
+      tooltip.value = {
+        show: true,
+        x: Math.min(rect.width - 160, Math.max(6, x + 10)),
+        y: Math.min(rect.height - 40, Math.max(6, y + 10)),
+        text: `${found.label}: ${found.value.toFixed(3)} (${found.category})`,
+      }
+    } else {
+      tooltip.value.show = false
+    }
+  }
+  mouseLeaveHandler = () => {
+    tooltip.value.show = false
+  }
+  canvas.addEventListener('mousemove', mouseMoveHandler)
+  canvas.addEventListener('mouseleave', mouseLeaveHandler)
+  hoverBound = true
+}
+
+onBeforeUnmount(() => {
+  const canvas = document.getElementById('brainCanvas') as HTMLCanvasElement | null
+  if (canvas) {
+    if (mouseMoveHandler) canvas.removeEventListener('mousemove', mouseMoveHandler)
+    if (mouseLeaveHandler) canvas.removeEventListener('mouseleave', mouseLeaveHandler)
+  }
+  hoverBound = false
+})
 
 // Events tab state
 const EVENT_TYPES = ['feeling', 'event', 'action'] as const
@@ -135,6 +259,9 @@ watchEffect(() => {
   brain?.weights && brain.weights.length
   // eslint-disable-next-line @typescript-eslint/no-unused-expressions
   brain?.biases && brain.biases.length
+  // also depend on rendering options
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
+  showConnections.value
   // Schedule after DOM updates
   requestAnimationFrame(() => renderBrainVisualization(brain))
 })
@@ -158,7 +285,21 @@ function renderBrainVisualization(brain: any) {
     brain.outputNodes || 8,
   ]
   const numLayers = layerSizes.length
-  const layerWidth = canvas.width / (numLayers + 1)
+  // Layout margins and inner drawing area
+  const margin = { left: 90, right: 280, top: 24, bottom: 28 }
+  const innerWidth = Math.max(10, canvas.width - margin.left - margin.right)
+  const innerHeight = Math.max(10, canvas.height - margin.top - margin.bottom)
+  const layerStepX = innerWidth / (numLayers - 1)
+  // Nudge the input (first) layer to the right a bit to separate from captions/labels area
+  const inputColumnOffset = 68
+
+  const layerX = (L: number) => margin.left + (L === 0 ? inputColumnOffset : 0) + L * layerStepX
+  const nodeY = (L: number, j: number) => {
+    const n = layerSizes[L]
+    if (n <= 0) return margin.top + innerHeight / 2
+    // evenly distribute within innerHeight with half-padding top/bottom
+    return margin.top + ((j + 0.5) * innerHeight) / n
+  }
 
   // Draw connections first (to be behind nodes)
   ctx.strokeStyle = 'rgba(200, 200, 200, 0.2)'
@@ -184,39 +325,44 @@ function renderBrainVisualization(brain: any) {
   for (let L = 0; L < numLayers - 1; L++) {
     const nIn = layerSizes[L]
     const nOut = layerSizes[L + 1]
-    const startX = (L + 1) * layerWidth
-    const endX = (L + 2) * layerWidth
+    const startX = layerX(L)
+    const endX = layerX(L + 1)
     for (let i = 0; i < nIn; i++) {
-      const startY = (i + 0.5) * (canvas.height / (nIn + 1))
+      const startY = nodeY(L, i)
       for (let o = 0; o < nOut; o++) {
-        const endY = (o + 0.5) * (canvas.height / (nOut + 1))
-        const weight = getWeight(L, o, i)
-        if (!hasWeights) {
-          // No weight data: draw neutral faint connection
-          ctx.strokeStyle = 'rgba(180, 180, 180, 0.15)'
-        } else if (weight < 0) {
-          const alpha = Math.max(0.06, Math.min(Math.abs(weight), 1) * 0.8)
-          ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`
-        } else if (weight > 0) {
-          const alpha = Math.max(0.06, Math.min(weight, 1) * 0.8)
-          ctx.strokeStyle = `rgba(0, 255, 0, ${alpha})`
-        } else {
-          ctx.strokeStyle = 'rgba(180, 180, 180, 0.06)'
+        const endY = nodeY(L + 1, o)
+        if (showConnections.value) {
+          const weight = getWeight(L, o, i)
+          if (!hasWeights) {
+            // No weight data: draw neutral faint connection
+            ctx.strokeStyle = 'rgba(180, 180, 180, 0.15)'
+          } else if (weight < 0) {
+            const alpha = Math.max(0.06, Math.min(Math.abs(weight), 1) * 0.8)
+            ctx.strokeStyle = `rgba(255, 0, 0, ${alpha})`
+          } else if (weight > 0) {
+            const alpha = Math.max(0.06, Math.min(weight, 1) * 0.8)
+            ctx.strokeStyle = `rgba(0, 255, 0, ${alpha})`
+          } else {
+            ctx.strokeStyle = 'rgba(180, 180, 180, 0.06)'
+          }
+          ctx.beginPath()
+          ctx.moveTo(startX, startY)
+          ctx.lineTo(endX, endY)
+          ctx.stroke()
         }
-        ctx.beginPath()
-        ctx.moveTo(startX, startY)
-        ctx.lineTo(endX, endY)
-        ctx.stroke()
       }
     }
   }
 
+  // Prepare input hitboxes
+  inputHitboxes = []
+
   // Draw nodes
   for (let L = 0; L < numLayers; L++) {
     const n = layerSizes[L]
-    const x = (L + 1) * layerWidth
+    const x = layerX(L)
     for (let j = 0; j < n; j++) {
-      const y = (j + 0.5) * (canvas.height / (n + 1))
+      const y = nodeY(L, j)
       let activation = 0
       if (Array.isArray(brain.activations) && Array.isArray(brain.activations[L])) {
         activation = brain.activations[L][j] ?? 0
@@ -229,6 +375,21 @@ function renderBrainVisualization(brain: any) {
       ctx.strokeStyle = '#000'
       ctx.lineWidth = 1
       ctx.stroke()
+
+      // Record input hitboxes for L=0
+      if (L === 0) {
+        const meta = inputMetaList.value[j]
+        const val = Array.isArray(brain.inputs) ? Number(brain.inputs[j] ?? 0) : 0
+        if (meta)
+          inputHitboxes.push({
+            x,
+            y,
+            r: radius,
+            label: prettyLabel(meta.label),
+            value: val,
+            category: meta.category,
+          })
+      }
     }
   }
 
@@ -237,23 +398,109 @@ function renderBrainVisualization(brain: any) {
   ctx.font = '12px Arial'
   ctx.textAlign = 'center'
 
-  // Input labels (drawn on canvas near input layer)
-  const inputLabels = computedInputLabels(layerSizes[0])
+  // Input labels (drawn on canvas near input layer) from store metadata
+  const inputLabels = inputMetaList.value.map((m) => prettyLabel(m.label))
 
   // Output labels
   const outputLabels = computedOutputLabels(layerSizes[numLayers - 1])
 
-  // Draw input labels
+  // Draw input labels to the left of input layer
+  ctx.textAlign = 'right'
+  const labelPad = 24
+  const inputLabelShift = 52
   for (let i = 0; i < Math.min(layerSizes[0], inputLabels.length); i++) {
-    const y = (i + 0.5) * (canvas.height / (layerSizes[0] + 1))
-    ctx.fillText(inputLabels[i], layerWidth / 2, y + 4)
+    const y = nodeY(0, i)
+    ctx.fillText(inputLabels[i], margin.left - labelPad + inputLabelShift, y + 4)
   }
 
-  // Draw output labels
+  // Draw output labels to the right of output layer
+  ctx.textAlign = 'left'
   for (let i = 0; i < Math.min(layerSizes[numLayers - 1], outputLabels.length); i++) {
-    const y = (i + 0.5) * (canvas.height / (layerSizes[numLayers - 1] + 1))
-    ctx.fillText(outputLabels[i], numLayers * layerWidth + layerWidth / 2, y + 4)
+    const y = nodeY(numLayers - 1, i)
+    ctx.fillText(outputLabels[i], canvas.width - margin.right + labelPad, y + 4)
   }
+
+  // Draw Internal/External divider across the canvas at the boundary between groups
+  const internalCount = internalInputIndices.value.length
+  if (internalCount > 0 && internalCount < layerSizes[0]) {
+    const yPrev = nodeY(0, internalCount - 1)
+    const yNext = nodeY(0, internalCount)
+    const ySep = (yPrev + yNext) / 2
+    ctx.strokeStyle = 'rgba(100, 100, 100, 0.35)'
+    ctx.setLineDash([4, 3])
+    ctx.beginPath()
+    ctx.moveTo(margin.left + 4, ySep)
+    ctx.lineTo(canvas.width - margin.right - 4, ySep)
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    // Captions for groups along left side
+    ctx.fillStyle = '#555'
+    ctx.textAlign = 'left'
+    // Internal caption near left margin
+    const intMidY = nodeY(0, Math.max(0, Math.floor(internalCount / 2)))
+    ctx.fillText('Internal', 16, intMidY)
+    // External caption near left margin
+    const extCount = layerSizes[0] - internalCount
+    const extMidIndex = internalCount + Math.max(0, Math.floor(extCount / 2))
+    const extMidY = nodeY(0, Math.min(layerSizes[0] - 1, extMidIndex))
+    ctx.fillText('External', 16, extMidY)
+  }
+
+  // Draw a small legend (top-right, inside inner area away from output labels)
+  const legendW = 190
+  const legendH = 100
+  const legendGap = 10
+  // Place legend in the empty space at the far right of the canvas
+  const legendX = canvas.width - legendW - legendGap
+  const legendY = margin.top + 6
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
+  ctx.fillRect(legendX, legendY, legendW, legendH)
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)'
+  ctx.strokeRect(legendX, legendY, legendW, legendH)
+  ctx.fillStyle = '#333'
+  // Right-align text inside legend with padding
+  const padL = 10
+  const padR = 10
+  const textX = legendX + legendW - padR
+  ctx.textAlign = 'right'
+  ctx.fillText('Legend', textX, legendY + 12)
+  // lines/markers with labels to their right
+  // Positive weight
+  ctx.strokeStyle = 'rgba(0,255,0,0.7)'
+  ctx.beginPath()
+  const markerEndX = textX - 105
+  const markerWidth = 60
+  const markerStartX = markerEndX - markerWidth
+  ctx.moveTo(markerStartX, legendY + 24)
+  ctx.lineTo(markerEndX, legendY + 24)
+  ctx.stroke()
+  ctx.fillStyle = '#333'
+  ctx.fillText('Positive weight', textX, legendY + 28)
+  // Negative weight
+  ctx.strokeStyle = 'rgba(255,0,0,0.7)'
+  ctx.beginPath()
+  ctx.moveTo(markerStartX, legendY + 40)
+  ctx.lineTo(markerEndX, legendY + 40)
+  ctx.stroke()
+  ctx.fillStyle = '#333'
+  ctx.fillText('Negative weight', textX, legendY + 44)
+  // Node example
+  ctx.beginPath()
+  // Place the node circle just left of the right-aligned text
+  ctx.arc(textX - 160, legendY + 58, 6, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(100,100,255,0.8)'
+  ctx.fill()
+  ctx.strokeStyle = '#000'
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.fillStyle = '#333'
+  ctx.fillText('Node intensity ~ |activation|', textX, legendY + 62)
+  // Connections toggle hint
+  ctx.fillText(`Connections: ${showConnections.value ? 'On' : 'Off'}`, textX, legendY + 80)
+
+  // Ensure hover listeners are attached
+  bindCanvasHover()
 }
 
 // Provide adaptive output labels based on brain.output length
@@ -269,55 +516,7 @@ const outputLabels = computed(() => {
   return Array.from({ length: outLen }, (_, i) => `Out ${i}`)
 })
 
-function computedInputLabels(len: number): string[] {
-  if (len === 14) {
-    return [
-      'x',
-      'y',
-      'vx',
-      'vy',
-      'energy',
-      'health',
-      'sin t',
-      'cos t',
-      'herb dx',
-      'herb dy',
-      'herb dist',
-      'bias',
-      'i12',
-      'i13',
-    ]
-  }
-  if (len === 24) {
-    return [
-      'x',
-      'y',
-      'vx',
-      'vy',
-      'energy',
-      'health',
-      'sin t',
-      'cos t',
-      'herb dx',
-      'herb dy',
-      'herb dist',
-      'carn dx',
-      'carn dy',
-      'carn dist',
-      'terrain',
-      'terrain n',
-      'speed |v|',
-      'dot herb',
-      'dot carn',
-      'sin2',
-      'cos2',
-      'isCarn',
-      'inv energy',
-      'bias',
-    ]
-  }
-  return Array.from({ length: len }, (_, i) => `In ${i}`)
-}
+// Input labels now come from the store; no local fallback mapping needed
 
 function computedOutputLabels(len: number): string[] {
   if (len === 6) return ['Turn', 'Thrust', 'Ax2', 'Eat', 'Rest', 'Boost']
@@ -453,12 +652,22 @@ function computedOutputLabels(len: number): string[] {
         :class="{ active: activeTab === 'brain' }"
         v-show="activeTab === 'brain'"
       >
-        <canvas
-          id="brainCanvas"
-          width="550"
-          height="400"
-          class="mx-auto border border-gray-200"
-        ></canvas>
+        <div class="flex items-center justify-end gap-3 mb-2">
+          <label class="text-sm flex items-center gap-2">
+            <input type="checkbox" v-model="showConnections" />
+            Show connections
+          </label>
+        </div>
+        <div class="mx-auto inline-block relative" style="width: 720px; height: 420px">
+          <canvas id="brainCanvas" width="720" height="420" class="border border-gray-200"></canvas>
+          <div
+            v-if="tooltip.show"
+            class="brain-tooltip"
+            :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+          >
+            {{ tooltip.text }}
+          </div>
+        </div>
         <div class="mt-4">
           <div class="flex items-center justify-between mb-2">
             <h3 class="font-semibold text-lg">Inputs</h3>
@@ -470,24 +679,90 @@ function computedOutputLabels(len: number): string[] {
               {{ showInputs ? 'Hide' : 'Show' }}
             </button>
           </div>
-          <div
-            v-if="showInputs && creature?.brain?.inputs && creature.brain.inputs.length"
-            class="space-y-1"
-          >
-            <div
-              v-for="(val, idx) in creature.brain.inputs"
-              :key="idx"
-              class="flex items-center gap-2 text-sm"
-            >
-              <div class="w-28 text-gray-700">
-                {{ computedInputLabels(creature.brain.inputs.length)[idx] ?? `In ${idx}` }}
+          <div v-if="showInputs && inputMetaList.length">
+            <!-- Single column with Internal and External sections -->
+            <div class="space-y-3">
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500 mb-1">Internal</div>
+                <div class="space-y-1">
+                  <div
+                    v-for="idx in internalInputIndices"
+                    :key="`in-int-${idx}`"
+                    class="flex items-center gap-2 text-sm"
+                  >
+                    <div class="w-32 text-gray-700">
+                      {{ displayLabelByIdx[idx] ?? `In ${idx}` }}
+                    </div>
+                    <div class="w-16 text-right tabular-nums">
+                      {{
+                        (+(
+                          creature?.brain?.inputs?.[idx] ??
+                          creature?.brain?.activations?.[0]?.[idx] ??
+                          0
+                        )).toFixed(3)
+                      }}
+                    </div>
+                    <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
+                      <div
+                        class="h-2 bg-emerald-500"
+                        :style="{
+                          width: `${Math.min(
+                            100,
+                            Math.max(
+                              0,
+                              ((creature?.brain?.inputs?.[idx] ??
+                                creature?.brain?.activations?.[0]?.[idx] ??
+                                0) +
+                                1) *
+                                50,
+                            ),
+                          )}%`,
+                        }"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="w-16 text-right tabular-nums">{{ (+val).toFixed(3) }}</div>
-              <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                <div
-                  class="h-2 bg-emerald-500"
-                  :style="{ width: `${Math.min(100, Math.max(0, (val + 1) * 50))}%` }"
-                ></div>
+              <div>
+                <div class="text-xs uppercase tracking-wide text-gray-500 mb-1">External</div>
+                <div class="space-y-1">
+                  <div
+                    v-for="idx in externalInputIndices"
+                    :key="`in-ext-${idx}`"
+                    class="flex items-center gap-2 text-sm"
+                  >
+                    <div class="w-32 text-gray-700">
+                      {{ displayLabelByIdx[idx] ?? `In ${idx}` }}
+                    </div>
+                    <div class="w-16 text-right tabular-nums">
+                      {{
+                        (+(
+                          creature?.brain?.inputs?.[idx] ??
+                          creature?.brain?.activations?.[0]?.[idx] ??
+                          0
+                        )).toFixed(3)
+                      }}
+                    </div>
+                    <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
+                      <div
+                        class="h-2 bg-emerald-500"
+                        :style="{
+                          width: `${Math.min(
+                            100,
+                            Math.max(
+                              0,
+                              ((creature?.brain?.inputs?.[idx] ??
+                                creature?.brain?.activations?.[0]?.[idx] ??
+                                0) +
+                                1) *
+                                50,
+                            ),
+                          )}%`,
+                        }"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -609,5 +884,19 @@ function computedOutputLabels(len: number): string[] {
 }
 .tab-content.active {
   display: block;
+}
+</style>
+<style scoped>
+.brain-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(17, 24, 39, 0.92); /* gray-900 */
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  max-width: 150px;
+  z-index: 10;
 }
 </style>

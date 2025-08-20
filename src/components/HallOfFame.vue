@@ -4,9 +4,9 @@ import { useSimulationStore } from '../composables/useSimulationStore'
 
 const store = useSimulationStore()
 
-// Hall of Fame (per-generation) from the store
+// Hall of Fame from the store (cumulative, persists across generations)
 const topN = 10
-const hallOfFame = computed(() => store.getHallOfFameTop(topN))
+const hallOfFame = computed(() => store.getHallOfFameTopAll(topN))
 </script>
 
 <template>
@@ -15,16 +15,18 @@ const hallOfFame = computed(() => store.getHallOfFameTop(topN))
       <thead>
         <tr>
           <th>Rank</th>
+          <th>Gen</th>
           <th>Name</th>
           <th>Lifespan</th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="hallOfFame.length === 0">
-          <td colspan="3" class="text-center">No entries yet</td>
+          <td colspan="4" class="text-center">No entries yet</td>
         </tr>
         <tr v-for="(c, idx) in hallOfFame" :key="c.id" class="hover">
           <th>{{ idx + 1 }}</th>
+          <td>{{ c.gen }}</td>
           <td>{{ c.name }}</td>
           <td>{{ c.lifespan }} ticks</td>
         </tr>

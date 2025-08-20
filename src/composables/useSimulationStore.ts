@@ -217,7 +217,14 @@ function createStore() {
     },
   })
   // Per-generation Hall of Fame (top by lifespan)
-  const hallOfFameGen = ref<Array<{ id: string; name: string; lifespan: number }>>([])
+  // id: stable brain-hash identifier; liveId: last known runtime creature id (for focus/lookups)
+  const hallOfFameGen = ref<
+    Array<{ id: string; name: string; lifespan: number; liveId?: string; gen: number }>
+  >([])
+  // Cumulative Hall of Fame across all generations (persists; keeps max lifespan per id)
+  const hallOfFameAll = ref<
+    Array<{ id: string; name: string; lifespan: number; liveId?: string; gen: number }>
+  >([])
   // Generation end signal and summary
   const lastGenEnd = ref<null | { gen: number; reason: string; timestamp: number }>(null)
   const genEndToken = ref(0)
@@ -230,7 +237,6 @@ function createStore() {
   let debugSkipCounter = 0
   // Bad brain hash library (collapse filters) maintained by simulation
   const badBrainHashes = reactive<Record<string, true>>({})
-
 
   // --- World Time state ---
   // Accumulated real seconds elapsed since simulation start (not scaled by simulationSpeed)
@@ -481,6 +487,139 @@ function createStore() {
         return v.slice(0, 24)
       }
     }
+  }
+
+  // Stable labels map for current input orderings (kept in sync with buildInputs above)
+  const InputIndexMap = {
+    OG: {
+      v1: [
+        'x',
+        'y',
+        'vx',
+        'vy',
+        'energy',
+        'health',
+        'sin t',
+        'cos t',
+        'near dx',
+        'near dy',
+        'near dist',
+        'bias',
+        'unused 12',
+        'unused 13',
+      ],
+      v2: [
+        'x',
+        'y',
+        'vx',
+        'vy',
+        'energy_norm',
+        'health_norm',
+        'near_dx',
+        'near_dy',
+        'near_dist_norm',
+        'temp_norm',
+        'humidity_norm',
+        'rain_norm',
+        'bias',
+        'pad',
+      ],
+    },
+    Zegion: {
+      v1: [
+        'x',
+        'y',
+        'vx',
+        'vy',
+        'energy',
+        'health',
+        'sin t',
+        'cos t',
+        'near dx',
+        'near dy',
+        'near dist',
+        'speed_norm',
+        'sin2',
+        'cos2',
+        'inv energy',
+        'bias',
+        'pad16',
+        'pad17',
+        'pad18',
+        'pad19',
+        'pad20',
+        'pad21',
+        'pad22',
+        'pad23',
+      ],
+      v2: [
+        'x',
+        'y',
+        'vx',
+        'vy',
+        'speed_norm',
+        'energy_norm',
+        'health_norm',
+        'near_dx',
+        'near_dy',
+        'near_dist_norm',
+        'temp_norm',
+        'humidity_norm',
+        'rain_norm',
+        'uv_norm',
+        'visibility_norm',
+        'wind_x_norm',
+        'wind_y_norm',
+        'altitude_norm',
+        'slope_norm',
+        'wetness_norm',
+        'water_depth_norm',
+        'flow_x_norm',
+        'flow_y_norm',
+      ],
+    },
+  } as const
+
+  function getInputLabelsFor(total: number, mode: 'OG' | 'Zegion', version: 'v1' | 'v2') {
+    const arr = (InputIndexMap as any)[mode]?.[version] as string[] | undefined
+    if (Array.isArray(arr) && arr.length >= total) return arr.slice(0, total)
+    if (Array.isArray(arr))
+      return [
+        ...arr,
+        ...Array.from({ length: total - arr.length }, (_, i) => `In ${arr.length + i}`),
+      ]
+    return Array.from({ length: total }, (_, i) => `In ${i}`)
+  }
+
+  function getInputCategoriesFor(total: number, mode: 'OG' | 'Zegion', version: 'v1' | 'v2') {
+    const internalIdx = new Set<number>()
+    if (mode === 'OG') {
+      // indices: energy(4), health(5)
+      internalIdx.add(4)
+      internalIdx.add(5)
+    } else {
+      if (version === 'v2') {
+        // indices: speed(4), energy(5), health(6)
+        internalIdx.add(4)
+        internalIdx.add(5)
+        internalIdx.add(6)
+      } else {
+        // v1 legacy (Zegion): energy(4), health(5), speed(11), inv energy(14)
+        internalIdx.add(4)
+        internalIdx.add(5)
+        internalIdx.add(11)
+        internalIdx.add(14)
+      }
+    }
+    return Array.from({ length: total }, (_, i) => (internalIdx.has(i) ? 'Internal' : 'External'))
+  }
+
+  function getInputMeta(total: number) {
+    const mode = simulationParams.brainMode
+    const version = simulationParams.inputsVersion
+    const labels = getInputLabelsFor(total, mode, version)
+    const cats = getInputCategoriesFor(total, mode, version)
+    return labels.map((label, idx) => ({ idx, label, category: cats[idx] }))
   }
 
   // Public setter to reseed brain RNG and refresh JS fallback brains
@@ -788,7 +927,7 @@ function createStore() {
     // Simulation speed multiplier (e.g., 0.25x, 0.5x, 1x, 2x, 4x)
     simulationSpeed: 1,
     // Brain input vector versioning (see inputs.md). 'v1' keeps legacy mapping; 'v2' uses env/time.
-    inputsVersion: 'v1' as 'v1' | 'v2',
+    inputsVersion: 'v2' as 'v1' | 'v2',
     // --- World Time controls (do NOT conflate with simulationSpeed) ---
     // Real seconds per world day (default 600s = 10 min/day)
     realSecondsPerDay: 600,
@@ -797,7 +936,7 @@ function createStore() {
     // Starting day-of-year in [0, 1), e.g., 0 = day 0, 0.25 = spring
     startDayOfYear01: 0,
     followSelected: false,
-    brainMode: 'OG' as 'OG' | 'Zegion',
+    brainMode: 'Zegion' as 'OG' | 'Zegion',
     // Auto-continue control (UI toggle)
     autoContinueGenerations: true,
     // Debugging tools
@@ -956,19 +1095,24 @@ function createStore() {
     if (Math.random() < eyesProb)
       eyes = Math.max(1, Math.min(6, eyes + (Math.random() < 0.5 ? -1 : 1)))
     const half = fov / 2
+    // Start from provided base angles if they match eyes; else evenly distribute
     const step = eyes > 1 ? fov / (eyes - 1) : 0
-    let angles = eyes === 1 ? [0] : Array.from({ length: eyes }, (_, i) => -half + i * step)
+    let angles =
+      Array.isArray(base.eyeAnglesDeg) && base.eyeAnglesDeg.length === eyes
+        ? base.eyeAnglesDeg.slice()
+        : eyes === 1
+          ? [0]
+          : Array.from({ length: eyes }, (_, i) => -half + i * step)
     if (jitterSigmaDeg > 0) {
       angles = angles.map((a) => {
         const j = gaussian() * jitterSigmaDeg
-        const aj = Math.max(-half, Math.min(half, a + j))
-        return aj
+        return Math.max(-half, Math.min(half, a + j))
       })
-      // Re-center to keep symmetry around 0°, then clamp and sort
-      const mean = angles.reduce((s, v) => s + v, 0) / Math.max(1, angles.length)
-      angles = angles.map((a) => Math.max(-half, Math.min(half, a - mean)))
-      angles.sort((a, b) => a - b)
     }
+    // Normalize to mean 0 and clamp/sort for sanity
+    const mean = angles.reduce((s, a) => s + a, 0) / Math.max(1, angles.length)
+    angles = angles.map((a) => Math.max(-half, Math.min(half, a - mean)))
+    angles.sort((a, b) => a - b)
     return { sightRange: sight, fieldOfViewDeg: fov, eyesCount: eyes, eyeAnglesDeg: angles }
   }
 
@@ -1160,23 +1304,26 @@ function createStore() {
         { deep: false },
       )
     } catch {}
-    // Load default bad brain hashes from public asset (if present)
+
+    // Load default bad brain hashes preferring dev API; fallback to public asset
     try {
-      const res = await fetch('/bad-brains.json', { cache: 'no-store' })
-      if (res.ok) {
-        const arr = await res.json()
-        if (Array.isArray(arr)) {
-          for (const h of arr) if (typeof h === 'string') badBrainHashes[h] = true
-        }
+      let arr: any = null
+      try {
+        const apiRes = await fetch('/api/bad-brains', { cache: 'no-store' })
+        if (apiRes.ok) arr = await apiRes.json()
+      } catch {}
+      if (!Array.isArray(arr)) {
+        try {
+          const res = await fetch('/bad-brains.json', { cache: 'no-store' })
+          if (res.ok) arr = await res.json()
+        } catch {}
       }
-    } catch (e) {
-      // Non-fatal; file may not exist in dev
-    }
-    // Push initial bad hashes to WASM if supported
-    syncBadBrainsToWasm()
-    // Reset world entities after attempt, regardless of path
-    resetSimulation()
-    return ok
+      if (Array.isArray(arr)) {
+        for (const h of arr) if (typeof h === 'string') badBrainHashes[h] = true
+        // Inform WASM of initial list
+        syncBadBrainsToWasm()
+      }
+    } catch {}
   }
 
   // Public: retry WASM initialization at runtime
@@ -1261,15 +1408,31 @@ function createStore() {
           : fovDefault
 
     const eyes = Math.max(1, Math.min(6, Math.floor(genes?.eyesCount ?? 2))) || 2
-    // Compute per-eye central angles across the FOV, symmetric around 0° (forward)
+    // Compute per-eye central angles with diet-aware defaults
     const half = fieldOfViewDeg / 2
     let eyeAnglesDeg: number[] = []
     if (eyes === 1) {
       eyeAnglesDeg = [0]
     } else {
-      // Distribute eyesCount angles from -half to +half inclusive
+      const isCarn = diet === 'Carnivore'
+      // Default evenly distributed across FOV
       const step = eyes > 1 ? fieldOfViewDeg / (eyes - 1) : 0
       eyeAnglesDeg = Array.from({ length: eyes }, (_, i) => -half + i * step)
+      // Diet-specific tweaks for common cases
+      if (eyes === 2) {
+        if (isCarn) {
+          const a = Math.min(half, 15)
+          eyeAnglesDeg = [-a, a]
+        } else {
+          const a = Math.min(half, 90)
+          eyeAnglesDeg = [-a, a]
+        }
+      } else if (eyes === 3) {
+        if (isCarn) {
+          const a = Math.min(half, 20)
+          eyeAnglesDeg = [-a, 0, a]
+        } // herbivores keep wide spread defaults
+      }
     }
     return { sightRange, fieldOfViewDeg, eyesCount: eyes, eyeAnglesDeg }
   }
@@ -1402,6 +1565,15 @@ function createStore() {
       classifyBadBrainsFromCache()
       // Inform WASM of updated list
       syncBadBrainsToWasm()
+      // Best-effort: push updated hashes to dev API so they persist to public/bad-brains.json
+      try {
+        const hashes = Object.keys(badBrainHashes)
+        await fetch('/api/bad-brains', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(hashes),
+        })
+      } catch {}
       // Trim brain cache before snapshot to keep it bounded similar to OG
       trimCache(brainCache, 5000, 0.2)
       await saveGenerationSnapshot(reason)
@@ -1506,7 +1678,8 @@ function createStore() {
       for (const k of Object.keys(parityStats.env.compMaxRel)) parityStats.env.compMaxRel[k] = 0
       parityStats.corpse.mismatches = 0
       parityStats.corpse.maxRelDiff = 0
-      for (const k of Object.keys(parityStats.corpse.compMaxRel)) parityStats.corpse.compMaxRel[k] = 0
+      for (const k of Object.keys(parityStats.corpse.compMaxRel))
+        parityStats.corpse.compMaxRel[k] = 0
     } catch {}
 
     for (let stepIdx = 0; stepIdx < steps; stepIdx++) {
@@ -1623,11 +1796,7 @@ function createStore() {
             const aliveIds = new Set(nextCreatures.map((c) => c.id))
             for (const [pid, prev] of prevById.entries()) {
               if (!aliveIds.has(pid)) {
-                // Record to HoF
-                hallOfFameGen.value.push({ id: prev.id, name: prev.name, lifespan: prev.lifespan })
-                // Telemetry: deaths counter
-                telemetry.totals.deaths++
-                // Also memoize brain in cache using lifespan as score
+                // Prepare brain JSON for hashing and caching
                 const brainJSON =
                   prev.brain && typeof prev.brain === 'object'
                     ? {
@@ -1636,8 +1805,28 @@ function createStore() {
                         biases: (prev.brain as any).biases,
                       }
                     : null
+                const hofId = brainJSON ? simpleHash(JSON.stringify(brainJSON)) : String(prev.id)
+                // Record to per-generation HoF with stable brain-hash id and last liveId for UI focus
+                const entry = {
+                  id: hofId,
+                  liveId: String(prev.id),
+                  name: prev.name,
+                  lifespan: prev.lifespan,
+                  gen: generation.value,
+                }
+                hallOfFameGen.value.push(entry)
+                // Update cumulative HoF: keep max lifespan per brain id
+                const idx = hallOfFameAll.value.findIndex((e) => e.id === entry.id)
+                if (idx === -1) {
+                  hallOfFameAll.value.push({ ...entry })
+                } else if ((hallOfFameAll.value[idx].lifespan || 0) < entry.lifespan) {
+                  hallOfFameAll.value[idx] = { ...entry }
+                }
+                // Telemetry: deaths counter
+                telemetry.totals.deaths++
+                // Also memoize brain in cache using lifespan as score
                 if (brainJSON) {
-                  const h = simpleHash(JSON.stringify(brainJSON))
+                  const h = hofId
                   const existing = brainCache[h]
                   if (!existing || existing.score < prev.lifespan) {
                     brainCache[h] = {
@@ -1724,16 +1913,30 @@ function createStore() {
               const wthr = sampleWeather(c.x, c.y)
               const terr = sampleTerrain(c.x, c.y)
               const speedMag = Math.hypot(c.vx ?? 0, c.vy ?? 0)
-              const jsWind = Number(simulationParams.windDragCoeff) * (wthr.windSpeed ?? 0) * speedMag
-              const coldDelta = Math.max(0, Number(simulationParams.comfortLowC) - (wthr.temperatureC ?? 0))
-              const jsCold = Number(simulationParams.tempColdPenaltyPerSec) * coldDelta / 10
-              const heatDelta = Math.max(0, (wthr.temperatureC ?? 0) - Number(simulationParams.comfortHighC))
-              const jsHeat = Number(simulationParams.tempHeatPenaltyPerSec) * heatDelta / 10
-              const humidEx = Math.max(0, (wthr.humidity01 ?? 0) - Number(simulationParams.humidityThreshold))
+              const jsWind =
+                Number(simulationParams.windDragCoeff) * (wthr.windSpeed ?? 0) * speedMag
+              const coldDelta = Math.max(
+                0,
+                Number(simulationParams.comfortLowC) - (wthr.temperatureC ?? 0),
+              )
+              const jsCold = (Number(simulationParams.tempColdPenaltyPerSec) * coldDelta) / 10
+              const heatDelta = Math.max(
+                0,
+                (wthr.temperatureC ?? 0) - Number(simulationParams.comfortHighC),
+              )
+              const jsHeat = (Number(simulationParams.tempHeatPenaltyPerSec) * heatDelta) / 10
+              const humidEx = Math.max(
+                0,
+                (wthr.humidity01 ?? 0) - Number(simulationParams.humidityThreshold),
+              )
               const jsHumid = Number(simulationParams.humidityDehydrationCoeffPerSec) * humidEx
-              const oxyEx = Math.max(0, (terr.elevation01 ?? 0) - Number(simulationParams.thinAirElevationCutoff01))
+              const oxyEx = Math.max(
+                0,
+                (terr.elevation01 ?? 0) - Number(simulationParams.thinAirElevationCutoff01),
+              )
               const jsOxy = Number(simulationParams.oxygenThinAirPenaltyPerSec) * oxyEx
-              const jsNoise = Number(simulationParams.noiseStressPenaltyPerSec) * (wthr.noise01 ?? 0)
+              const jsNoise =
+                Number(simulationParams.noiseStressPenaltyPerSec) * (wthr.noise01 ?? 0)
               const jsDisease = Number(simulationParams.diseaseEnergyDrainPerSec)
               // Swim heuristic parity with WASM: treat top/bottom world bands as water
               // World height is 2000 in both JS fallback and WASM world creation
@@ -1752,7 +1955,8 @@ function createStore() {
               ]
               for (const [name, wv, jv] of comps) {
                 const diff = Math.abs(wv - jv)
-                const rel = Math.max(Math.abs(wv), 1e-6) > 0 ? diff / Math.max(Math.abs(wv), 1e-6) : diff
+                const rel =
+                  Math.max(Math.abs(wv), 1e-6) > 0 ? diff / Math.max(Math.abs(wv), 1e-6) : diff
                 const badComp = diff > tolAbs && rel > tolRel
                 if (badComp) {
                   console.debug('[WASM EnvCost JS-Recompute]', {
@@ -1766,7 +1970,8 @@ function createStore() {
                   envMismatchCount++
                 }
                 envMaxRel = Math.max(envMaxRel, Number.isFinite(rel) ? rel : 0)
-                if (envCompMax[name] !== undefined) envCompMax[name] = Math.max(envCompMax[name], Number.isFinite(rel) ? rel : 0)
+                if (envCompMax[name] !== undefined)
+                  envCompMax[name] = Math.max(envCompMax[name], Number.isFinite(rel) ? rel : 0)
               }
               // Locomotion parity check
               const jsLoc = Number(simulationParams.moveCostCoeffPerSpeedPerSec) * speedMag
@@ -1784,7 +1989,10 @@ function createStore() {
                 envMismatchCount++
               }
               envMaxRel = Math.max(envMaxRel, Number.isFinite(rLoc) ? rLoc : 0)
-              envCompMax.locomotion = Math.max(envCompMax.locomotion, Number.isFinite(rLoc) ? rLoc : 0)
+              envCompMax.locomotion = Math.max(
+                envCompMax.locomotion,
+                Number.isFinite(rLoc) ? rLoc : 0,
+              )
             }
             // Write back env parity accumulators
             parityStats.env.mismatches = envMismatchCount
@@ -1826,7 +2034,14 @@ function createStore() {
             // Local accumulators
             let corpseMismatchCount = 0
             let corpseMaxRel = 0
-            const corpseCompMax: Record<string, number> = { base: 0, temp: 0, humid: 0, rain: 0, wet: 0, total: 0 }
+            const corpseCompMax: Record<string, number> = {
+              base: 0,
+              temp: 0,
+              humid: 0,
+              rain: 0,
+              wet: 0,
+              total: 0,
+            }
             for (let i = 0; i < sampleCount; i++) {
               const w = corpseCosts[i]
               const parts = [w.base ?? 0, w.temp ?? 0, w.humid ?? 0, w.rain ?? 0, w.wet ?? 0].map(
@@ -1875,11 +2090,15 @@ function createStore() {
               const tempTerm = Math.max(0, Math.min(2, ((wthr.temperatureC ?? 0) - 20) / 15))
               const jTemp = base * (Number(simulationParams.corpseTempDecayCoeff) || 0) * tempTerm
               const jHumid =
-                base * (Number(simulationParams.corpseHumidityDecayCoeff) || 0) * Math.max(0, wthr.humidity01 ?? 0)
+                base *
+                (Number(simulationParams.corpseHumidityDecayCoeff) || 0) *
+                Math.max(0, wthr.humidity01 ?? 0)
               const rain01 = (wthr as any).rain01 ?? (wthr as any).precipitation01 ?? 0
               const wet01 = (terr as any).wet01 ?? (terr as any).wetness01 ?? 0
-              const jRain = base * (Number(simulationParams.corpseRainDecayCoeff) || 0) * Math.max(0, rain01)
-              const jWet = base * (Number(simulationParams.corpseWetnessDecayCoeff) || 0) * Math.max(0, wet01)
+              const jRain =
+                base * (Number(simulationParams.corpseRainDecayCoeff) || 0) * Math.max(0, rain01)
+              const jWet =
+                base * (Number(simulationParams.corpseWetnessDecayCoeff) || 0) * Math.max(0, wet01)
               const jTotal = Math.max(0, base + jTemp + jHumid + jRain + jWet)
               const comps: Array<[string, number, number]> = [
                 ['base', Number(w.base ?? 0), base],
@@ -1892,7 +2111,8 @@ function createStore() {
               const ctRel = 0.01
               for (const [name, wv, jv] of comps) {
                 const diff = Math.abs(wv - jv)
-                const rel = Math.max(Math.abs(wv), 1e-6) > 0 ? diff / Math.max(Math.abs(wv), 1e-6) : diff
+                const rel =
+                  Math.max(Math.abs(wv), 1e-6) > 0 ? diff / Math.max(Math.abs(wv), 1e-6) : diff
                 if (diff > ctAbs && rel > ctRel) {
                   console.debug('[WASM CorpseDecay JS-Recompute]', {
                     index: i,
@@ -1905,7 +2125,11 @@ function createStore() {
                   corpseMismatchCount++
                 }
                 corpseMaxRel = Math.max(corpseMaxRel, Number.isFinite(rel) ? rel : 0)
-                if (corpseCompMax[name] !== undefined) corpseCompMax[name] = Math.max(corpseCompMax[name], Number.isFinite(rel) ? rel : 0)
+                if (corpseCompMax[name] !== undefined)
+                  corpseCompMax[name] = Math.max(
+                    corpseCompMax[name],
+                    Number.isFinite(rel) ? rel : 0,
+                  )
               }
               const tw = Number(w.total ?? 0)
               const td = Math.abs(tw - jTotal)
@@ -1926,7 +2150,8 @@ function createStore() {
             // Write back corpse parity accumulators
             parityStats.corpse.mismatches = corpseMismatchCount
             parityStats.corpse.maxRelDiff = corpseMaxRel
-            for (const k of Object.keys(corpseCompMax)) parityStats.corpse.compMaxRel[k] = corpseCompMax[k]
+            for (const k of Object.keys(corpseCompMax))
+              parityStats.corpse.compMaxRel[k] = corpseCompMax[k]
           }
           // Lightweight proximity events (WASM path lacks intent signals)
           try {
@@ -2980,8 +3205,30 @@ function createStore() {
           } catch (e) {
             // non-fatal
           }
-          // Add to per-generation Hall of Fame
-          hallOfFameGen.value.push({ id: c.id, name: c.name, lifespan: c.lifespan })
+          // Add to per-generation Hall of Fame using stable brain hash when available
+          const hofBrainJSON =
+            c.brain && typeof c.brain === 'object'
+              ? {
+                  layerSizes: (c.brain as any).layerSizes,
+                  weights: (c.brain as any).weights,
+                  biases: (c.brain as any).biases,
+                }
+              : null
+          const hofIdNow = hofBrainJSON ? simpleHash(JSON.stringify(hofBrainJSON)) : String(c.id)
+          const entryNow = {
+            id: hofIdNow,
+            liveId: String(c.id),
+            name: c.name,
+            lifespan: c.lifespan,
+            gen: generation.value,
+          }
+          hallOfFameGen.value.push(entryNow)
+          const idxAll = hallOfFameAll.value.findIndex((e) => e.id === entryNow.id)
+          if (idxAll === -1) {
+            hallOfFameAll.value.push({ ...entryNow })
+          } else if ((hallOfFameAll.value[idxAll].lifespan || 0) < entryNow.lifespan) {
+            hallOfFameAll.value[idxAll] = { ...entryNow }
+          }
           corpses.value.push({
             x: c.x,
             y: c.y,
@@ -3073,6 +3320,12 @@ function createStore() {
       pushSeries(telemetry.series.environment.visibility01, wx.visibility01)
       pushSeries(telemetry.series.environment.windSpeed, wx.windSpeed)
     } catch {}
+
+    // If the entire population is extinct, end the generation immediately.
+    if (creatures.value.length === 0) {
+      endGeneration('extinction')
+      return
+    }
 
     // Stagnation detection -> end generation
     if (movementStats.avgSpeed < simulationParams.movementThreshold) stagnantTicks.value += 1
@@ -3660,8 +3913,19 @@ function createStore() {
   }
 
   // Hall of Fame accessors (per-generation)
-  function getHallOfFameTop(limit = 10): Array<{ id: string; name: string; lifespan: number }> {
+  function getHallOfFameTop(
+    limit = 10,
+  ): Array<{ id: string; name: string; lifespan: number; liveId?: string; gen: number }> {
     const list = hallOfFameGen.value.slice()
+    list.sort((a, b) => (b.lifespan || 0) - (a.lifespan || 0))
+    return list.slice(0, Math.max(0, limit))
+  }
+
+  // Cumulative Hall of Fame accessor (all-time)
+  function getHallOfFameTopAll(
+    limit = 10,
+  ): Array<{ id: string; name: string; lifespan: number; liveId?: string; gen: number }> {
+    const list = hallOfFameAll.value.slice()
     list.sort((a, b) => (b.lifespan || 0) - (a.lifespan || 0))
     return list.slice(0, Math.max(0, limit))
   }
@@ -3789,6 +4053,7 @@ function createStore() {
     getBrainCache,
     getTopBrains,
     getHallOfFameTop,
+    getHallOfFameTopAll,
 
     // Bad brain hashes API
     addBadBrainHash,
@@ -3804,5 +4069,9 @@ function createStore() {
     // Debug logging API
     setDebugLogging,
     log,
+    // Input metadata API
+    getInputMeta,
+    getInputLabelsFor,
+    getInputCategoriesFor,
   }
 }

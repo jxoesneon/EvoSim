@@ -210,7 +210,7 @@ This document lists the information architecture and visualization concepts for 
 - Spatial visualizations need positional sampling (e.g., per N ticks) to keep memory bounded.
 
 - Additional instrumentation recommended:
-  - Event logs for births, deaths (with cause), fights, feeds, rests, mating (timestamps + IDs). 
+  - Event logs for births, deaths (with cause), fights, feeds, rests, mating (timestamps + IDs).
   - Periodic sampling (per N ticks) for positions, health, energy, current action/state.
   - Gene mutation records per creature per generation (what mutated, magnitude).
   - Weather/terrain samples over time windows, aligned with tick indices.
@@ -279,3 +279,4 @@ This document lists the information architecture and visualization concepts for 
 │ Footer                                                                        │
 │ Export summary ▾   Copy settings   Help/Docs                                  │
 └──────────────────────────────────────────────────────────────────────────────┘
+```

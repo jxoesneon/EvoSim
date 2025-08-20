@@ -51,7 +51,9 @@ async function copyToClipboard(text: string) {
 </script>
 <template>
   <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs">Generation</div>
       <div
         class="stat-value text-lg md:text-2xl leading-tight cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5"
@@ -64,62 +66,116 @@ async function copyToClipboard(text: string) {
       >
         {{ gen }}
       </div>
-      <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">Reason: {{ reason }}</div>
+      <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">
+        Reason: {{ reason }}
+      </div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Avg Speed</div>
-      <div class="stat-value text-lg md:text-2xl leading-tight" :title="'Average creature speed this gen'">
+      <div
+        class="stat-value text-lg md:text-2xl leading-tight"
+        :title="'Average creature speed this gen'"
+      >
         {{ avgSpeed.toFixed(3) }}
       </div>
       <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">per gen</div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Population</div>
       <div class="stat-value text-lg md:text-2xl leading-tight">{{ liveCreatures }}</div>
-      <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">live • births {{ births }} • deaths {{ deaths }}</div>
+      <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">
+        live • births {{ births }} • deaths {{ deaths }}
+      </div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">World Time</div>
       <div class="stat-value text-lg md:text-2xl leading-tight" :title="'Seconds since sim start'">
         {{ worldSec.toFixed(1) }}s
       </div>
       <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">since start</div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Gen Duration</div>
-      <div class="stat-value text-lg md:text-2xl leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5" :title="'Click to copy duration'" role="button" tabindex="0" @click="copyToClipboard(fmtSeconds(durationSec))" @keydown.enter="copyToClipboard(fmtSeconds(durationSec))" aria-label="Copy generation duration">
+      <div
+        class="stat-value text-lg md:text-2xl leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5"
+        :title="'Click to copy duration'"
+        role="button"
+        tabindex="0"
+        @click="copyToClipboard(fmtSeconds(durationSec))"
+        @keydown.enter="copyToClipboard(fmtSeconds(durationSec))"
+        aria-label="Copy generation duration"
+      >
         {{ fmtSeconds(durationSec) }}
       </div>
-      <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">{{ ended ? 'final' : 'running' }}</div>
+      <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">
+        {{ ended ? 'final' : 'running' }}
+      </div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Gen End</div>
-      <div class="stat-value text-sm md:text-base leading-tight truncate" :title="fmtDate(endTimestampMs)">
+      <div
+        class="stat-value text-sm md:text-base leading-tight truncate"
+        :title="fmtDate(endTimestampMs)"
+      >
         {{ fmtDate(endTimestampMs) }}
       </div>
       <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">local time</div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Stagnation</div>
-      <div class="stat-value text-lg md:text-2xl leading-tight" :title="'Ticks below movement threshold'">
+      <div
+        class="stat-value text-lg md:text-2xl leading-tight"
+        :title="'Ticks below movement threshold'"
+      >
         {{ stagTicks }}
       </div>
       <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">ticks</div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Plants</div>
-      <div class="stat-value text-lg md:text-2xl leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5" :title="'Click to copy count'" role="button" tabindex="0" @click="copyToClipboard(String(livePlants))" @keydown.enter="copyToClipboard(String(livePlants))" aria-label="Copy plants count">
+      <div
+        class="stat-value text-lg md:text-2xl leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5"
+        :title="'Click to copy count'"
+        role="button"
+        tabindex="0"
+        @click="copyToClipboard(String(livePlants))"
+        @keydown.enter="copyToClipboard(String(livePlants))"
+        aria-label="Copy plants count"
+      >
         {{ livePlants }}
       </div>
       <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">at end</div>
     </div>
-    <div class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none">
+    <div
+      class="stat shadow bg-base-200/50 rounded-xl p-3 md:p-4 min-h-[96px] flex flex-col justify-between border-0 focus:outline-none"
+    >
       <div class="stat-title text-xs md:text-sm leading-tight">Corpses</div>
-      <div class="stat-value text-lg md:text-2xl leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5" :title="'Click to copy count'" role="button" tabindex="0" @click="copyToClipboard(String(liveCorpses))" @keydown.enter="copyToClipboard(String(liveCorpses))" aria-label="Copy corpses count">
+      <div
+        class="stat-value text-lg md:text-2xl leading-tight focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:rounded-md px-0.5 -mx-0.5"
+        :title="'Click to copy count'"
+        role="button"
+        tabindex="0"
+        @click="copyToClipboard(String(liveCorpses))"
+        @keydown.enter="copyToClipboard(String(liveCorpses))"
+        aria-label="Copy corpses count"
+      >
         {{ liveCorpses }}
       </div>
       <div class="stat-desc text-[10px] md:text-xs whitespace-normal break-words">at end</div>
     </div>
   </div>
 </template>
-

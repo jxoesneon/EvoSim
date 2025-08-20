@@ -154,7 +154,8 @@ async function main() {
 
   const __filename = fileURLToPath(import.meta.url)
   const __dirname = path.dirname(__filename)
-  const badPath = path.join(__dirname, 'bad-brains.json')
+  // Centralized canonical bad-brains file lives under public/ so the app can fetch it
+  const badPath = path.join(__dirname, '..', 'public', 'bad-brains.json')
   const badBrains = await loadBadBrains(badPath)
 
   console.log(`Brain Smoke Test`)

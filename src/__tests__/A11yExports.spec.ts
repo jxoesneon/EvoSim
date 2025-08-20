@@ -10,13 +10,22 @@ vi.mock('../composables/useSimulationStore', () => {
         totals: {},
         series: {
           events: {
-            births: [0, 1, 3], deaths: [0, 1, 2], eats_plant: [0, 0, 1], eats_corpse: [0, 0, 0],
-            drinks: [0, 0, 1], attacks: [0, 1, 1], gets_hit: [0, 0, 1],
+            births: [0, 1, 3],
+            deaths: [0, 1, 2],
+            eats_plant: [0, 0, 1],
+            eats_corpse: [0, 0, 0],
+            drinks: [0, 0, 1],
+            attacks: [0, 1, 1],
+            gets_hit: [0, 0, 1],
           },
           population: { creatures: [1, 2, 3], plants: [5, 4, 3], corpses: [0, 1, 1] },
           environment: {
-            temperatureC: [20, 21], humidity01: [0.5, 0.6], precipitation01: [0.1, 0.2],
-            uv01: [0.2, 0.3], visibility01: [0.7, 0.8], windSpeed: [1.0, 1.1],
+            temperatureC: [20, 21],
+            humidity01: [0.5, 0.6],
+            precipitation01: [0.1, 0.2],
+            uv01: [0.2, 0.3],
+            visibility01: [0.7, 0.8],
+            windSpeed: [1.0, 1.1],
           },
           avgSpeed: [0.1, 0.2, 0.15],
         },
@@ -45,10 +54,16 @@ vi.mock('../composables/useUserPrefs', () => {
 
 // Silence URL/Blob/anchor in CSV export
 beforeAll(() => {
-  vi.stubGlobal('Blob', class {
-    constructor(_parts: any[], _opts?: any) {}
+  vi.stubGlobal(
+    'Blob',
+    class {
+      constructor(_parts: any[], _opts?: any) {}
+    } as any,
+  )
+  vi.stubGlobal('URL', {
+    createObjectURL: vi.fn(() => 'blob:url'),
+    revokeObjectURL: vi.fn(),
   } as any)
-  vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:url'), revokeObjectURL: vi.fn() } as any)
   // Only mock anchor creation, delegate others to original
   const origCreate = (document.createElement as any).bind(document) as typeof document.createElement
   ;(document as any).createElement = vi.fn((tag: string, options?: any) => {
@@ -96,9 +111,9 @@ describe('Export controls a11y', () => {
     const selects = w.findAll('select[aria-label="Preferred export format"]')
     expect(selects.length).toBeGreaterThan(0)
     // each group should have an Export button with proper labeling
-    const exportBtns = w.findAll('button').filter(b => /export/i.test(b.text()))
+    const exportBtns = w.findAll('button').filter((b) => /export/i.test(b.text()))
     expect(exportBtns.length).toBeGreaterThan(0)
-    exportBtns.forEach(btn => {
+    exportBtns.forEach((btn) => {
       expect(btn.attributes('aria-describedby')).toBeTruthy()
       expect((btn.attributes('aria-label') || '').toLowerCase()).toContain('export')
     })
@@ -111,9 +126,9 @@ describe('Export controls a11y', () => {
     const w = shallowMount(MovementActivity)
     const selects = w.findAll('select[aria-label="Preferred export format"]')
     expect(selects.length).toBeGreaterThan(0)
-    const exportBtns = w.findAll('button').filter(b => /export/i.test(b.text()))
+    const exportBtns = w.findAll('button').filter((b) => /export/i.test(b.text()))
     expect(exportBtns.length).toBeGreaterThan(0)
-    exportBtns.forEach(btn => {
+    exportBtns.forEach((btn) => {
       expect(btn.attributes('aria-describedby')).toBeTruthy()
       expect((btn.attributes('aria-label') || '').toLowerCase()).toContain('export')
     })

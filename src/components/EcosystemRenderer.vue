@@ -25,15 +25,29 @@ const emit = defineEmits(['creature-selected'])
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const simulationStore = useSimulationStore()
 
-// Speed selector (bottom-left overlay)
-const speedOptions = [0, 0.25, 0.5, 1, 2, 4]
+// Speed selector (bottom-left overlay) -> discrete slider
+const speedOptions = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 const speedLabels: Record<number, string> = {
   0: '0x',
-  0.25: '0.25x',
+  0.1: '0.1x',
+  0.2: '0.2x',
+  0.3: '0.3x',
+  0.4: '0.4x',
   0.5: '0.5x',
+  0.6: '0.6x',
+  0.7: '0.7x',
+  0.8: '0.8x',
+  0.9: '0.9x',
   1: '1x',
   2: '2x',
+  3: '3x',
   4: '4x',
+  5: '5x',
+  6: '6x',
+  7: '7x',
+  8: '8x',
+  9: '9x',
+  10: '10x',
 }
 const currentSpeed = computed(() => simulationStore.simulationParams.simulationSpeed)
 function setSpeed(v: number) {
@@ -42,6 +56,30 @@ function setSpeed(v: number) {
 function labelForSpeed(v: number) {
   return speedLabels[v] ?? `${v}x`
 }
+function findClosestIndex(v: number) {
+  let best = 0
+  let bestDiff = Infinity
+  for (let i = 0; i < speedOptions.length; i++) {
+    const d = Math.abs(speedOptions[i] - v)
+    if (d < bestDiff) {
+      bestDiff = d
+      best = i
+    }
+  }
+  return best
+}
+const sliderIndex = ref(findClosestIndex(currentSpeed.value))
+watch(currentSpeed, (v) => {
+  sliderIndex.value = findClosestIndex(v)
+})
+function onSpeedSliderInput(e: Event) {
+  const val = Number((e.target as HTMLInputElement).value)
+  sliderIndex.value = val
+  const speed = speedOptions[val] ?? 1
+  setSpeed(speed)
+}
+// percent string for track fill (0%..100%) based on slider index
+const percentStr = computed(() => `${(sliderIndex.value / (speedOptions.length - 1)) * 100}%`)
 let animationFrameId: number | null = null
 let rafActive = false
 let isDragging = false
@@ -525,22 +563,28 @@ function handleTouchEnd(event: TouchEvent) {
     :width="width"
     :height="height"
   ></canvas>
-  <!-- Bottom-left overlay: divider + speed selector -->
+  <!-- Bottom-left overlay: divider + speed slider -->
   <div class="absolute bottom-4 right-16 sm:right-24 z-50 text-white select-none">
     <div class="w-56 border-t border-white/40 mb-1"></div>
     <div class="text-[10px] uppercase tracking-wider text-white/80 mb-1">Speed</div>
     <div
-      class="inline-flex overflow-hidden rounded-md bg-black/50 backdrop-blur-md shadow-lg border border-white/30"
+      class="w-48 px-2 py-1 rounded-md bg-black/50 backdrop-blur-md shadow-lg border border-white/30 text-center"
     >
-      <button
-        v-for="opt in speedOptions"
-        :key="opt"
-        class="px-2 sm:px-3 py-1 text-xs sm:text-sm transition-colors"
-        :class="currentSpeed === opt ? 'bg-emerald-400 text-black' : 'hover:bg-white/20 text-white'"
-        @click="setSpeed(opt)"
-      >
-        {{ labelForSpeed(opt) }}
-      </button>
+      <div class="flex items-center justify-center gap-2">
+        <input
+          type="range"
+          class="range range-xs speed-range w-36"
+          min="0"
+          :max="speedOptions.length - 1"
+          step="1"
+          v-model.number="sliderIndex"
+          :style="{ '--pct': percentStr }"
+          @input="onSpeedSliderInput"
+        />
+        <span class="text-xs tabular-nums w-10 text-right">
+          {{ labelForSpeed(speedOptions[sliderIndex]) }}
+        </span>
+      </div>
     </div>
   </div>
   <!-- Debug hover overlay (follows cursor) -->
@@ -570,5 +614,64 @@ canvas {
 }
 canvas.is-dragging {
   cursor: grabbing;
+}
+
+/* Slim, centered speed slider styling */
+.speed-range {
+  /* Ensure enough box height so the thumb is within hit area */
+  height: 16px !important;
+  padding: 6px 0 !important; /* prevents clipping and enables dragging on thumb */
+  overflow: visible !important; /* ensure thumb can extend without clipping */
+  cursor: pointer;
+  /* WebKit-based: draw base (9px) + fill (7px) + small left cap (7px) */
+  background:
+    linear-gradient(#ffffff, #ffffff) no-repeat,
+    linear-gradient(rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.2)) no-repeat,
+    linear-gradient(#ffffff, #ffffff) no-repeat !important;
+  background-size:
+    var(--pct, 0%) 7px,
+    100% 9px,
+    7px 7px !important;
+  background-position:
+    left center,
+    left center,
+    left center !important;
+  border-radius: 9999px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+.speed-range::-webkit-slider-runnable-track {
+  height: 9px !important; /* 75% of 12px thumb */
+  background: transparent !important; /* use element background layers */
+  border-radius: 9999px !important;
+}
+.speed-range::-moz-range-track {
+  height: 9px !important; /* 75% of 12px thumb */
+  background: rgba(255, 255, 255, 0.2) !important; /* base grey */
+  border-radius: 9999px !important;
+}
+.speed-range::-moz-range-progress {
+  height: 7px !important; /* slightly slimmer white fill */
+  background: #ffffff !important;
+  border-radius: 9999px !important;
+}
+.speed-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  pointer-events: auto; /* allow dragging the thumb */
+  background: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) !important; /* subtle inner halo */
+  border-radius: 9999px;
+}
+.speed-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  pointer-events: auto; /* allow dragging the thumb */
+  background: #ffffff !important;
+  border: 2px solid rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) !important;
+  border-radius: 9999px;
 }
 </style>

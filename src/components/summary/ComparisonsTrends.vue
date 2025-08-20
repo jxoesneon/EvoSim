@@ -69,15 +69,41 @@ function sparkOption(data: number[], color = '#60a5fa', label = '') {
 // Raw series from telemetry
 const rawAvg = computed<number[]>(() => series.value?.avgSpeed ?? [])
 const rawPop = computed<number[]>(() => series.value?.population?.creatures ?? [])
-function diff(arr: number[]) { const out: number[] = []; for (let i=1;i<arr.length;i++){ out.push(Math.max(0,(arr[i]??0)-(arr[i-1]??0))) } return out }
+function diff(arr: number[]) {
+  const out: number[] = []
+  for (let i = 1; i < arr.length; i++) {
+    out.push(Math.max(0, (arr[i] ?? 0) - (arr[i - 1] ?? 0)))
+  }
+  return out
+}
 const rawBirths = computed<number[]>(() => diff(series.value?.events?.births ?? []))
 const rawDeaths = computed<number[]>(() => diff(series.value?.events?.deaths ?? []))
 
 // Processed (smoothed + windowed) series used for display and exports
-const procAvg = computed<number[]>(() => clipToWindow(smoothingOn.value ? sma(rawAvg.value, smoothingWin.value) : rawAvg.value, windowSel.value))
-const procPop = computed<number[]>(() => clipToWindow(smoothingOn.value ? sma(rawPop.value, smoothingWin.value) : rawPop.value, windowSel.value))
-const procBirths = computed<number[]>(() => clipToWindow(smoothingOn.value ? sma(rawBirths.value, smoothingWin.value) : rawBirths.value, windowSel.value))
-const procDeaths = computed<number[]>(() => clipToWindow(smoothingOn.value ? sma(rawDeaths.value, smoothingWin.value) : rawDeaths.value, windowSel.value))
+const procAvg = computed<number[]>(() =>
+  clipToWindow(
+    smoothingOn.value ? sma(rawAvg.value, smoothingWin.value) : rawAvg.value,
+    windowSel.value,
+  ),
+)
+const procPop = computed<number[]>(() =>
+  clipToWindow(
+    smoothingOn.value ? sma(rawPop.value, smoothingWin.value) : rawPop.value,
+    windowSel.value,
+  ),
+)
+const procBirths = computed<number[]>(() =>
+  clipToWindow(
+    smoothingOn.value ? sma(rawBirths.value, smoothingWin.value) : rawBirths.value,
+    windowSel.value,
+  ),
+)
+const procDeaths = computed<number[]>(() =>
+  clipToWindow(
+    smoothingOn.value ? sma(rawDeaths.value, smoothingWin.value) : rawDeaths.value,
+    windowSel.value,
+  ),
+)
 
 const optAvgSpeed = computed(() => sparkOption(procAvg.value, '#34d399', 'Avg Speed'))
 const optPopulation = computed(() => sparkOption(procPop.value, '#60a5fa', 'Population'))
@@ -106,7 +132,7 @@ function downloadText(filename: string, text: string) {
 // Export helper (tick, value) using the processed series
 function exportCsv(filename: string, x: number[], y: number[], yLabel: string) {
   const rows = [['tick', yLabel], ...x.map((xi, i) => [`${xi}`, `${y[i] ?? ''}`])]
-  downloadText(filename, rows.map(r => r.join(',')).join('\n'))
+  downloadText(filename, rows.map((r) => r.join(',')).join('\n'))
 }
 
 const xAvg = computed<number[]>(() => procAvg.value.map((_, i) => i))
@@ -118,8 +144,16 @@ const xDeaths = computed<number[]>(() => procDeaths.value.map((_, i) => i))
   <div class="card bg-base-100 border p-3" role="region" aria-label="Comparisons and Trends">
     <div class="font-semibold mb-2">Comparisons & Trends</div>
     <div class="flex items-center gap-2 mb-2 text-[11px] opacity-80">
-      <label class="flex items-center gap-1"><input type="checkbox" v-model="smoothingOn" class="checkbox checkbox-xs" /> Smoothing</label>
-      <select v-model.number="smoothingWin" class="select select-ghost select-xs" :disabled="!smoothingOn" aria-label="Smoothing window">
+      <label class="flex items-center gap-1"
+        ><input type="checkbox" v-model="smoothingOn" class="checkbox checkbox-xs" />
+        Smoothing</label
+      >
+      <select
+        v-model.number="smoothingWin"
+        class="select select-ghost select-xs"
+        :disabled="!smoothingOn"
+        aria-label="Smoothing window"
+      >
         <option :value="5">5</option>
         <option :value="9">9</option>
         <option :value="13">13</option>
@@ -133,22 +167,62 @@ const xDeaths = computed<number[]>(() => procDeaths.value.map((_, i) => i))
       </select>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-      <div class="bg-base-200/30 rounded-md h-16 p-1" role="group" aria-label="Average Speed sparkline">
+      <div
+        class="bg-base-200/30 rounded-md h-16 p-1"
+        role="group"
+        aria-label="Average Speed sparkline"
+      >
         <div class="flex items-center justify-between">
           <div id="trend-avg-desc" class="text-[10px] opacity-60">Avg Speed</div>
           <div class="flex gap-1">
-            <button class="btn btn-ghost btn-xs" title="Download PNG" aria-describedby="trend-avg-desc" aria-label="Export Avg Speed sparkline as PNG" @click="refAvg?.downloadPNG?.('trend-avg-speed.png')">PNG</button>
-            <button class="btn btn-ghost btn-xs" title="Download CSV" aria-describedby="trend-avg-desc" aria-label="Export Avg Speed data as CSV" @click="exportCsv('trend-avg-speed.csv', xAvg, procAvg, 'avgSpeed')">CSV</button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download PNG"
+              aria-describedby="trend-avg-desc"
+              aria-label="Export Avg Speed sparkline as PNG"
+              @click="refAvg?.downloadPNG?.('trend-avg-speed.png')"
+            >
+              PNG
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download CSV"
+              aria-describedby="trend-avg-desc"
+              aria-label="Export Avg Speed data as CSV"
+              @click="exportCsv('trend-avg-speed.csv', xAvg, procAvg, 'avgSpeed')"
+            >
+              CSV
+            </button>
           </div>
         </div>
         <EChart ref="refAvg" class="w-full h-12" :option="optAvgSpeed" />
       </div>
-      <div class="bg-base-200/30 rounded-md h-16 p-1" role="group" aria-label="Population sparkline">
+      <div
+        class="bg-base-200/30 rounded-md h-16 p-1"
+        role="group"
+        aria-label="Population sparkline"
+      >
         <div class="flex items-center justify-between">
           <div id="trend-pop-desc" class="text-[10px] opacity-60">Population</div>
           <div class="flex gap-1">
-            <button class="btn btn-ghost btn-xs" title="Download PNG" aria-describedby="trend-pop-desc" aria-label="Export Population sparkline as PNG" @click="refPop?.downloadPNG?.('trend-population.png')">PNG</button>
-            <button class="btn btn-ghost btn-xs" title="Download CSV" aria-describedby="trend-pop-desc" aria-label="Export Population data as CSV" @click="exportCsv('trend-population.csv', xPop, procPop, 'population')">CSV</button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download PNG"
+              aria-describedby="trend-pop-desc"
+              aria-label="Export Population sparkline as PNG"
+              @click="refPop?.downloadPNG?.('trend-population.png')"
+            >
+              PNG
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download CSV"
+              aria-describedby="trend-pop-desc"
+              aria-label="Export Population data as CSV"
+              @click="exportCsv('trend-population.csv', xPop, procPop, 'population')"
+            >
+              CSV
+            </button>
           </div>
         </div>
         <EChart ref="refPop" class="w-full h-12" :option="optPopulation" />
@@ -157,8 +231,24 @@ const xDeaths = computed<number[]>(() => procDeaths.value.map((_, i) => i))
         <div class="flex items-center justify-between">
           <div id="trend-births-desc" class="text-[10px] opacity-60">Births</div>
           <div class="flex gap-1">
-            <button class="btn btn-ghost btn-xs" title="Download PNG" aria-describedby="trend-births-desc" aria-label="Export Births sparkline as PNG" @click="refBirths?.downloadPNG?.('trend-births.png')">PNG</button>
-            <button class="btn btn-ghost btn-xs" title="Download CSV" aria-describedby="trend-births-desc" aria-label="Export Births data as CSV" @click="exportCsv('trend-births.csv', xBirths, procBirths, 'birthsPerStep')">CSV</button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download PNG"
+              aria-describedby="trend-births-desc"
+              aria-label="Export Births sparkline as PNG"
+              @click="refBirths?.downloadPNG?.('trend-births.png')"
+            >
+              PNG
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download CSV"
+              aria-describedby="trend-births-desc"
+              aria-label="Export Births data as CSV"
+              @click="exportCsv('trend-births.csv', xBirths, procBirths, 'birthsPerStep')"
+            >
+              CSV
+            </button>
           </div>
         </div>
         <EChart ref="refBirths" class="w-full h-12" :option="optBirths" />
@@ -167,8 +257,24 @@ const xDeaths = computed<number[]>(() => procDeaths.value.map((_, i) => i))
         <div class="flex items-center justify-between">
           <div id="trend-deaths-desc" class="text-[10px] opacity-60">Deaths</div>
           <div class="flex gap-1">
-            <button class="btn btn-ghost btn-xs" title="Download PNG" aria-describedby="trend-deaths-desc" aria-label="Export Deaths sparkline as PNG" @click="refDeaths?.downloadPNG?.('trend-deaths.png')">PNG</button>
-            <button class="btn btn-ghost btn-xs" title="Download CSV" aria-describedby="trend-deaths-desc" aria-label="Export Deaths data as CSV" @click="exportCsv('trend-deaths.csv', xDeaths, procDeaths, 'deathsPerStep')">CSV</button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download PNG"
+              aria-describedby="trend-deaths-desc"
+              aria-label="Export Deaths sparkline as PNG"
+              @click="refDeaths?.downloadPNG?.('trend-deaths.png')"
+            >
+              PNG
+            </button>
+            <button
+              class="btn btn-ghost btn-xs"
+              title="Download CSV"
+              aria-describedby="trend-deaths-desc"
+              aria-label="Export Deaths data as CSV"
+              @click="exportCsv('trend-deaths.csv', xDeaths, procDeaths, 'deathsPerStep')"
+            >
+              CSV
+            </button>
           </div>
         </div>
         <EChart ref="refDeaths" class="w-full h-12" :option="optDeaths" />

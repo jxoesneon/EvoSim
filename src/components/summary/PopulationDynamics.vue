@@ -12,9 +12,9 @@ const baseCo = computed<number[]>(() => pop.value?.corpses ?? [])
 
 // Empty-state fallback: if no series, use current live counts as a single sample
 const fallbackCounts = computed(() => ({
-  creatures: ((store.creatures as any).value?.length ?? 0) as number,
-  plants: ((store.plants as any).value?.length ?? 0) as number,
-  corpses: ((store.corpses as any).value?.length ?? 0) as number,
+  creatures: (((store as any)?.creatures as any)?.value?.length ?? 0) as number,
+  plants: (((store as any)?.plants as any)?.value?.length ?? 0) as number,
+  corpses: (((store as any)?.corpses as any)?.value?.length ?? 0) as number,
 }))
 
 function ensureSeries(arr: number[], fallback: number) {

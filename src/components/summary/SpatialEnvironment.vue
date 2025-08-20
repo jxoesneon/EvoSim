@@ -79,7 +79,14 @@ const heatOption = computed(() => {
     <div class="flex items-center justify-between mb-2">
       <div class="font-semibold">Spatial & Environment</div>
       <!-- Export current heatmap as PNG via EChart ref -->
-      <button class="btn btn-ghost btn-xs" title="Download PNG" aria-label="Export spatial heatmap as PNG" @click="chartRef?.downloadPNG?.('spatial-environment.png')">PNG</button>
+      <button
+        class="btn btn-ghost btn-xs"
+        title="Download PNG"
+        aria-label="Export spatial heatmap as PNG"
+        @click="chartRef?.downloadPNG?.('spatial-environment.png')"
+      >
+        PNG
+      </button>
     </div>
     <EChart ref="chartRef" class="w-full h-52" :option="heatOption" />
   </div>
