@@ -1456,6 +1456,11 @@ function createStore() {
     isRunning.value = false
     // Ensure any RAF loop cancels synchronously
     rafHaltToken.value++
+    // Preserve previous names to keep stability across resets
+    const prevNames = new Map<string, string>()
+    try {
+      for (const c of creatures.value) prevNames.set(c.id, c.name)
+    } catch {}
     creatures.value = []
     plants.value = []
     corpses.value = []
@@ -1464,47 +1469,75 @@ function createStore() {
     currentGenStartTs.value = Date.now()
     // Clear per-creature events
     for (const k of Object.keys(creatureEvents)) delete creatureEvents[k]
-            return {
+    // If WASM is available, rebuild state from it; else fall back to JS
+    if (wasmWorld) {
+      try {
+        const wc: any[] = wasmWorld.creatures_json?.() ?? []
+        const wp: any[] = wasmWorld.plants_json?.() ?? []
+        const wco: any[] = wasmWorld.corpses_json?.() ?? []
+        creatures.value = wc.map((c: any) => {
+          const diet = c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore'
+          const visionBase = computeVisionPhenotypeGlobal(c.genes || {}, diet)
+          const varied =
+            generation.value === 1 && simulationParams.initialVarianceEnabled
+              ? applyInitialVisionVariance(visionBase)
+              : visionBase
+          return {
+            id: c.id,
+            name: nameSvc.assignName(c.id, prevNames.get(c.id) || undefined),
+            x: c.x,
+            y: c.y,
+            vx: c.vx ?? 0,
+            vy: c.vy ?? 0,
+            energy: c.energy ?? 100,
+            thirst: 100,
+            stamina: 100,
+            health: c.health ?? 100,
+            sDrive: 0,
+            fear: 0,
+            lifespan: c.lifespan ?? 0,
+            isPregnant: false,
+            gestationTimer: 0,
+            childGenes: null,
+            genes: c.genes || {},
+            phenotype: {
               size: 1.0,
               speed: 2.0,
-              diet: c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
+              diet,
               sightRange: varied.sightRange,
               fieldOfViewDeg: varied.fieldOfViewDeg,
               eyesCount: varied.eyesCount,
               eyeAnglesDeg: varied.eyeAnglesDeg,
-            }
-          })(),
-          brain: c.brain
-            ? (() => {
-                const ls = c.brain.layer_sizes ?? c.brain.layerSizes ?? [14, 8, 8]
-                const acts = c.brain.activations ?? undefined
-                const weights = c.brain.weights ?? undefined
-                const biases = c.brain.biases ?? undefined
-                const output =
-                  Array.isArray(acts) && acts.length > 0 ? acts[acts.length - 1] : undefined
-                return { layerSizes: ls, weights, biases, activations: acts, output }
-              })()
-            : {
-                layerSizes: computeLayerSizesForCreature(
-                  (generation.value === 1 && simulationParams.initialVarianceEnabled
-                    ? applyInitialVisionVariance(
-                        computeVisionPhenotypeGlobal(
-                          c.genes || {},
-                          c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-                        ),
-                      ).eyesCount
-                    : computeVisionPhenotypeGlobal(
-                        c.genes || {},
-                        c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-                      ).eyesCount) as number,
-                ),
-              },
-          radius: c.radius ?? 5,
-          maxStamina: 100,
-          communicationColor: { r: 255, g: 180, b: 255 },
-          isResting: false,
-          isSprinting: false,
-        }))
+            },
+            brain: c.brain
+              ? (() => {
+                  const ls = c.brain.layer_sizes ?? c.brain.layerSizes ?? [14, 8, 8]
+                  const acts = c.brain.activations ?? undefined
+                  const weights = c.brain.weights ?? undefined
+                  const biases = c.brain.biases ?? undefined
+                  const output =
+                    Array.isArray(acts) && acts.length > 0 ? acts[acts.length - 1] : undefined
+                  return { layerSizes: ls, weights, biases, activations: acts, output }
+                })()
+              : {
+                  layerSizes: computeLayerSizesForCreature(
+                    (generation.value === 1 && simulationParams.initialVarianceEnabled
+                      ? applyInitialVisionVariance(
+                          computeVisionPhenotypeGlobal(
+                            c.genes || {},
+                            diet,
+                          ),
+                        ).eyesCount
+                      : computeVisionPhenotypeGlobal(c.genes || {}, diet).eyesCount) as number,
+                  ),
+                },
+            radius: c.radius ?? 5,
+            maxStamina: 100,
+            communicationColor: { r: 255, g: 180, b: 255 },
+            isResting: false,
+            isSprinting: false,
+          } as Creature
+        })
         plants.value = wp.map((p: any) => ({ x: p.x, y: p.y, radius: p.radius }))
         corpses.value = (wco ?? []).map((co: any) => ({
           x: co.x,
