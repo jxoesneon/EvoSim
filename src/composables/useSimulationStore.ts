@@ -2,6 +2,7 @@ import { ref, reactive, readonly, watch } from 'vue'
 import getZegionSpec from '@/zegion/io/spec'
 import { RNG } from '@/zegion/utils/seeding'
 import ActivationRegistry, { type ActivationName } from '@/zegion/activations'
+import { useNameService } from '@/composables/useNameService'
 
 // Interfaces for our simulation entities
 export interface Camera {
@@ -65,7 +66,6 @@ export function useSimulationStore() {
   if (!store) {
     store = createStore()
   }
-
   // Genetic helpers (for future reproduction wiring)
   function inheritVisionGenes(parentA: any = {}, parentB: any = {}) {
     // Inherit alleles by sampling one allele from each parent; default to heterozygous if missing
@@ -310,6 +310,9 @@ function createStore() {
 
   // Deterministic brain RNG used for JS fallback brain init
   let rngBrain = new RNG(0xdeadbeef)
+  // Human-friendly naming service
+  const nameSvc = useNameService()
+  nameSvc.prime(60)
 
   // Lightweight JS brain helpers to mirror WASM path enough to compile and run
   function initBrain(layerSizes: number[], rng: RNG = rngBrain) {
@@ -672,6 +675,7 @@ function createStore() {
     | 'health_gain'
     | 'health_loss'
     | 'birth'
+    | 'death'
   interface CreatureEvent {
     ts: number
     type: CreatureEventType
@@ -701,6 +705,16 @@ function createStore() {
     const arr = creatureEvents[id] || (creatureEvents[id] = [])
     arr.push(ev)
     if (arr.length > MAX_EVENTS_PER_CREATURE) arr.splice(0, arr.length - MAX_EVENTS_PER_CREATURE)
+    // Dev visibility: log and emit a browser event for overlays/listeners
+    try {
+      if ((import.meta as any).env?.DEV) {
+        // eslint-disable-next-line no-console
+        console.debug('[CreatureEvent]', id, ev.type, ev.key, ev.label || '', new Date(ev.ts).toISOString())
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('creature-event', { detail: { id, ev } }))
+      }
+    } catch {}
   }
   function shouldEmitEvent(id: string, key: CreatureEventKey, minIntervalMs = 1500): boolean {
     const arr = creatureEvents[id]
@@ -1450,52 +1464,6 @@ function createStore() {
     currentGenStartTs.value = Date.now()
     // Clear per-creature events
     for (const k of Object.keys(creatureEvents)) delete creatureEvents[k]
-    // Clear prev-state caches (WASM proximity/resources)
-    wasmPrevFlagsById.clear()
-    wasmPrevResources.clear()
-
-    if (wasmWorld) {
-      try {
-        // Reinitialize the WASM world's entities to a fresh state
-        if (typeof wasmWorld.reset_world === 'function') {
-          wasmWorld.reset_world()
-        }
-        const wc: any[] = wasmWorld.creatures_json()
-        const wp: any[] = wasmWorld.plants_json()
-        const wco: any[] =
-          typeof wasmWorld.corpses_json === 'function' ? wasmWorld.corpses_json() : []
-        // Map WASM creatures into our richer TS type
-        creatures.value = wc.map((c: any, idx: number) => ({
-          id: c.id,
-          name: `Creature-${idx}`,
-          x: c.x,
-          y: c.y,
-          vx: c.vx,
-          vy: c.vy,
-          energy: c.energy ?? 100,
-          thirst: 100,
-          stamina: 100,
-          health: c.health ?? 100,
-          sDrive: 0,
-          fear: 0,
-          lifespan: c.lifespan ?? 0,
-          isPregnant: false,
-          gestationTimer: 0,
-          childGenes: null,
-          genes: c.genes || {},
-          actionsMask: c.actions_mask ?? 0,
-          feelingsMask: c.feelings_mask ?? 0,
-          stagnantTicks: c.stagnant_ticks ?? 0,
-          phenotype: (() => {
-            const base = computeVisionPhenotypeGlobal(
-              c.genes || {},
-              c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-            )
-            // Apply initial variance only on generation 1
-            const varied =
-              generation.value === 1 && simulationParams.initialVarianceEnabled
-                ? applyInitialVisionVariance(base)
-                : base
             return {
               size: 1.0,
               speed: 2.0,
@@ -1612,9 +1580,11 @@ function createStore() {
         generation.value === 1 && simulationParams.initialVarianceEnabled
           ? applyInitialVisionVariance(baseVision)
           : baseVision
+      const id = Math.random().toString(36).substring(2, 9)
+      const name = nameSvc.assignName(id)
       creatures.value.push({
-        id: Math.random().toString(36).substring(2, 9),
-        name: `Creature-${i}`,
+        id,
+        name,
         x,
         y,
         vx: Math.random() * 2 - 1,
@@ -2764,6 +2734,16 @@ function createStore() {
         if (offensive || defensive) {
           attackE += simulationParams.attackCostPerHitEnergy
           Sout += simulationParams.attackCostPerHitStamina
+          // Emit attack attempt event (throttled) and increment telemetry
+          if (shouldEmitEvent(c.id, 'attacks', 1200)) {
+            pushCreatureEvent(c.id, {
+              ts: Date.now(),
+              type: 'action',
+              key: 'attacks',
+              label: 'Attacks',
+            })
+            telemetry.totals.attacks++
+          }
         }
 
         // Accumulate action energy costs
@@ -3122,6 +3102,7 @@ function createStore() {
               key: 'gets_hit',
               label: 'Gets hit',
             })
+            telemetry.totals.gets_hit++
           }
 
           // Actions
@@ -3185,6 +3166,14 @@ function createStore() {
 
         // Death check -> create corpse and skip adding to next list
         if (c.health <= 0) {
+          // Emit death event and increment telemetry
+          pushCreatureEvent(c.id, {
+            ts: Date.now(),
+            type: 'event',
+            key: 'death',
+            label: 'Dies',
+          })
+          telemetry.totals.deaths++
           // Record best-of brain into memoization cache using lifespan as score
           try {
             const brainJSON =
@@ -3420,7 +3409,7 @@ function createStore() {
         for (const c of creatures.value) nameById.set(c.id, c.name)
         creatures.value = wc.map((c: any, idx: number) => ({
           id: c.id,
-          name: nameById.get(c.id) || `Creature-${idx}`,
+          name: nameSvc.assignName(c.id, nameById.get(c.id) || undefined),
           x: c.x,
           y: c.y,
           vx: c.vx,
@@ -3464,9 +3453,11 @@ function createStore() {
       }
     }
     // JS fallback creature creation
+    const id = Math.random().toString(36).substring(2, 9)
+    const name = nameSvc.assignName(id)
     creatures.value.push({
-      id: Math.random().toString(36).substring(2, 9),
-      name: `Creature-${creatures.value.length}`,
+      id,
+      name,
       x: posX,
       y: posY,
       vx: Math.random() * 2 - 1,
@@ -3534,6 +3525,60 @@ function createStore() {
     if (!selectedCreatureId.value) return null
     const c = creatures.value.find((cc) => cc.id === selectedCreatureId.value)
     return c || null
+  }
+
+  // Debug helper: spawn a temporary creature and trigger a sequence of events
+  function debugSpawnAndTrigger() {
+    try {
+      const cx = camera.x
+      const cy = camera.y
+      addCreature(cx, cy)
+      // Newly added creature should be last in list
+      const c = creatures.value[creatures.value.length - 1]
+      if (!c) return
+      const id = c.id
+      // Make it easy to observe: select and follow the spawned creature and center camera
+      try {
+        setSelectedCreature?.(id)
+        setFollowSelected?.(true)
+        centerCameraOn?.(c.x, c.y)
+      } catch {}
+      const now = Date.now()
+      // Emit a few events for visual verification
+      pushCreatureEvent(id, { ts: now - 1, type: 'event', key: 'birth', label: 'Birth (debug)' })
+      pushCreatureEvent(id, { ts: now, type: 'action', key: 'attacks', label: 'Attacks (debug)' })
+      telemetry.totals.attacks++
+      pushCreatureEvent(id, {
+        ts: now + 50,
+        type: 'action',
+        key: 'gets_hit',
+        label: 'Gets hit (debug)',
+      })
+      telemetry.totals.gets_hit++
+      pushCreatureEvent(id, {
+        ts: now + 100,
+        type: 'action',
+        key: 'eats_plant',
+        label: 'Eats plant (debug)',
+      })
+      telemetry.totals.eats_plant++
+      // Schedule death to verify cleanup and death event path
+      setTimeout(() => {
+        const cc = creatures.value.find((k: any) => k.id === id)
+        if (cc) {
+          // Push explicit death event for visibility, then apply health=0 to exercise cleanup path
+          pushCreatureEvent(id, {
+            ts: Date.now(),
+            type: 'event',
+            key: 'death',
+            label: 'Death (debug)',
+          })
+          cc.health = 0
+        }
+      }, 400)
+    } catch (e) {
+      console.warn('debugSpawnAndTrigger failed', e)
+    }
   }
 
   // Clean up resources
@@ -4037,7 +4082,8 @@ function createStore() {
     getCreatureAtPosition,
     setSelectedCreature,
     getSelectedCreature,
-
+    debugSpawnAndTrigger,
+    
     // Persistence
     saveSimulation,
     loadSimulation,

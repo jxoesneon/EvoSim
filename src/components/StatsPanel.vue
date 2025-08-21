@@ -167,6 +167,9 @@ const EVENT_KEYS = [
   'stamina_loss',
   'health_gain',
   'health_loss',
+  // lifecycle
+  'birth',
+  'death',
   // actions
   'drinks',
   'sprints',
@@ -206,6 +209,8 @@ const keyFilters = ref<Record<EventKey, boolean>>({
   stamina_loss: true,
   health_gain: true,
   health_loss: true,
+  birth: true,
+  death: true,
   drinks: true,
   sprints: true,
   stops_sprinting: true,

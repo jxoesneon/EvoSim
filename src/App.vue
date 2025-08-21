@@ -16,6 +16,8 @@ import { enableFPSMeter, disableFPSMeter } from './webgl/renderer'
 import GeneralStats from './components/GeneralStats.vue'
 // @ts-ignore - SFC default export provided by Vue compiler
 import HallOfFame from './components/HallOfFame.vue'
+// @ts-ignore - SFC default export provided by Vue compiler
+import EventNotifications from './components/EventNotifications.vue'
 import { Switch, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 const simulationStore = useSimulationStore()
 // Live selection: keep only the selected id and derive the creature from the store list each render
@@ -98,6 +100,9 @@ const debugLogging = computed<boolean>({
   get: () => (simulationStore.simulationParams as any).debugLogging as boolean,
   set: (v: boolean) => simulationStore.setDebugLogging?.(!!v),
 })
+
+// Notifications duration (ms)
+const notificationDurationMs = ref<number>(3000)
 
 // JSONBin bindings
 const jsonBinId = computed<string>({
@@ -421,6 +426,9 @@ const showTelemetryOverlay = ref(false)
           @creature-selected="onCreatureSelected"
         />
 
+        <!-- Event Notifications overlay (top-right) -->
+        <EventNotifications v-if="debugLogging" :duration-ms="notificationDurationMs" />
+
         <!-- Compact Stats: bottom-left overlay -->
         <div
           class="absolute bottom-3 left-3 z-50 join whitespace-nowrap bg-white/85 backdrop-blur px-3 pr-4 py-2 rounded-2xl shadow-xl border border-base-300 text-[11px] md:text-xs font-medium flex items-center"
@@ -619,6 +627,27 @@ const showTelemetryOverlay = ref(false)
                 <span class="label-text">Enable Console Debug Logs</span>
                 <input type="checkbox" class="toggle toggle-secondary" v-model="debugLogging" />
               </label>
+              <div>
+                <button
+                  class="btn btn-sm btn-outline"
+                  title="Spawn a temporary creature near camera and trigger events"
+                  @click="simulationStore.debugSpawnAndTrigger?.()"
+                >
+                  Spawn Debug Creature
+                </button>
+              </div>
+              <div class="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label class="label cursor-pointer">
+                  <span class="label-text">Notification Duration (ms)</span>
+                </label>
+                <input
+                  type="number"
+                  class="input input-sm input-bordered w-[120px] justify-self-end"
+                  v-model.number="notificationDurationMs"
+                  min="500"
+                  step="100"
+                />
+              </div>
             </div>
           </div>
         </div>
