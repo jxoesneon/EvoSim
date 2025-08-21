@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, reactive } from 'vue'
+import { useSimulationStore } from '../composables/useSimulationStore'
 
 type CreatureEvent = {
   ts: number
@@ -24,6 +25,17 @@ const MAX_ITEMS = 6
 const props = defineProps<{ durationMs?: number }>()
 const LIFETIME_MS = typeof props.durationMs === 'number' ? Math.max(500, props.durationMs) : 3000
 
+const store = useSimulationStore()
+
+function resolveCreatureName(id: string): string {
+  try {
+    const c = store.creatures.value.find((x: any) => x.id === id)
+    return c?.name || `#${id}`
+  } catch {
+    return `#${id}`
+  }
+}
+
 function pushToast(ev: CreatureEvent, creatureId: string) {
   const text = ev.label || `${ev.type}:${ev.key}`
   const kind =
@@ -31,7 +43,8 @@ function pushToast(ev: CreatureEvent, creatureId: string) {
       ? (ev.type as 'action' | 'event' | 'feeling')
       : 'event'
   const id = nextId++
-  state.items.push({ id, text: `#${creatureId} · ${text}`, kind })
+  const who = resolveCreatureName(creatureId)
+  state.items.push({ id, text: `${who} · ${text}`, kind })
   // Trim
   if (state.items.length > MAX_ITEMS) state.items.splice(0, state.items.length - MAX_ITEMS)
   // Auto-remove
