@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from 'vue'
+import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useSimulationStore } from '../../composables/useSimulationStore'
 import { useUserPrefs } from '../../composables/useUserPrefs'
+import { useUiPrefs } from '../../composables/useUiPrefs'
 const UPlotLine = defineAsyncComponent(() => import('./charts/UPlotLine.vue'))
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 
 const store = useSimulationStore()
 const avgSeries = computed<number[]>(() => (store.telemetry as any)?.series?.avgSpeed ?? [])
 const xData = computed<number[]>(() => avgSeries.value.map((_, i) => i))
-const showThreshold = ref(true)
+const { getMovementActivity, setMovementActivity } = useUiPrefs()
+const movePrefs = getMovementActivity()
+const showThreshold = ref<boolean>(
+  typeof movePrefs?.showThreshold === 'boolean' ? movePrefs.showThreshold : true,
+)
 const threshold = computed<number>(
   () => (store as any)?.simulationParams?.movementThreshold ?? 0.02,
 )
@@ -26,7 +31,7 @@ const uOpts = computed(() => ({
 }))
 
 // Histogram of avg speeds (last N samples)
-const HIST_BINS = ref(20)
+const HIST_BINS = ref<number>(Number.isFinite(movePrefs?.histBins) ? (movePrefs?.histBins as number) : 20)
 const histOption = computed(() => {
   const src = avgSeries.value
   const N = Math.min(src.length, 600) // recent window
@@ -157,6 +162,10 @@ function exportLineUsingPreferred() {
   if (fmt === 'png') return downloadLinePng()
   return exportLineCsv()
 }
+
+// Persist watchers
+watch(showThreshold, (v) => setMovementActivity({ showThreshold: v }))
+watch(HIST_BINS, (v) => setMovementActivity({ histBins: Number(v) || 20 }))
 </script>
 <template>
   <div class="card bg-base-100 border p-3 h-64">

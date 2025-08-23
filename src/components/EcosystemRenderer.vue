@@ -2,7 +2,8 @@
 import { ref, onMounted, onBeforeUnmount, unref, computed, watch, defineAsyncComponent } from 'vue'
 import { useSimulationStore } from '../composables/useSimulationStore'
 const CostTelemetryOverlay = defineAsyncComponent(() => import('./CostTelemetryOverlay.vue'))
-import { initWebGL, renderScene } from '../webgl/renderer'
+import { initWebGL, renderScene, disposeWebGL } from '../webgl/renderer'
+import { useUiPrefs } from '../composables/useUiPrefs'
 
 // Viewport props (canvas size + whether to show overlays)
 const props = defineProps({
@@ -24,6 +25,115 @@ const props = defineProps({
 const emit = defineEmits(['creature-selected'])
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const simulationStore = useSimulationStore()
+const uiPrefs = useUiPrefs()
+
+// Action-notice highlight state
+const highlightActive = ref(false)
+const highlightX = ref(0)
+const highlightY = ref(0)
+let highlightTimer: any = null
+
+function worldToScreen(x: number, y: number) {
+  const rect = canvasRef.value?.getBoundingClientRect()
+  if (!rect) return { sx: 0, sy: 0, ok: false }
+  const aspect = rect.width / rect.height
+  const worldHalf = 1000
+  const visibleHalfWidth = worldHalf / simulationStore.camera.zoom
+  const visibleHalfHeight = worldHalf / aspect / simulationStore.camera.zoom
+  const sx = ((x - (simulationStore.camera.x - visibleHalfWidth)) / (visibleHalfWidth * 2)) * rect.width
+  const sy = ((simulationStore.camera.y + visibleHalfHeight - y) / (visibleHalfHeight * 2)) * rect.height
+  const out = { sx: rect.left + sx, sy: rect.top + sy, ok: true }
+  try {
+    // eslint-disable-next-line no-console
+    if (uiPrefs.isLogOn?.('world_to_screen'))
+      console.debug('[Renderer] worldToScreen', {
+        world: { x, y },
+        cam: { x: simulationStore.camera.x, y: simulationStore.camera.y, z: simulationStore.camera.zoom },
+        rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        aspect,
+        visibleHalfWidth,
+        visibleHalfHeight,
+        out,
+      })
+  } catch {}
+  return out
+}
+
+function handleActionNotice(e: CustomEvent) {
+  const detail = e.detail || {}
+  // TEMP probe: confirm handler fires and show current logging gates
+  try {
+    const lg: any = uiPrefs.getLogging?.()
+    // eslint-disable-next-line no-console
+    console.warn('[ActionNotice][probe] fired', {
+      type: detail?.type,
+      gates: { master: lg?.enabled, action_notice: lg?.types?.action_notice },
+    })
+  } catch {}
+  const prefs = uiPrefs.getActionNoticing?.()
+  if (!prefs || !prefs.enabled) return
+  if (prefs.byAction && prefs.byAction[detail.type] === false) return
+  const x = Number(detail.x)
+  const y = Number(detail.y)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return
+  // Save previous cam
+  const prev = { x: simulationStore.camera.x, y: simulationStore.camera.y, z: simulationStore.camera.zoom }
+  // Debug before
+  try {
+    // eslint-disable-next-line no-console
+    if (uiPrefs.isLogOn?.('action_notice'))
+      console.debug('[ActionNotice] start', {
+        type: detail.type,
+        world: { x, y },
+        camBefore: { ...prev },
+        prefs,
+      })
+  } catch {}
+  // Center and zoom to target
+  simulationStore.centerCameraOn?.(x, y)
+  const targetZoom = Math.max(0.1, Number(prefs.zoom) || 2)
+  const delta = targetZoom - simulationStore.camera.zoom
+  if (Math.abs(delta) > 1e-6) simulationStore.zoomCamera?.(delta)
+  try {
+    // eslint-disable-next-line no-console
+    if (uiPrefs.isLogOn?.('action_notice'))
+      console.debug('[ActionNotice] after focus', {
+        camAfter: {
+          x: simulationStore.camera.x,
+          y: simulationStore.camera.y,
+          z: simulationStore.camera.zoom,
+        },
+      })
+  } catch {}
+  // Highlight overlay
+  const screen = worldToScreen(x, y)
+  if (screen.ok) {
+    highlightX.value = screen.sx
+    highlightY.value = screen.sy
+    highlightActive.value = true
+  }
+  // Clear existing timer
+  if (highlightTimer) clearTimeout(highlightTimer)
+  const hold = Math.max(500, Number(prefs.holdMs) || 5000)
+  highlightTimer = setTimeout(() => {
+    // Zoom back and roughly center back
+    simulationStore.centerCameraOn?.(prev.x, prev.y)
+    const back = prev.z - simulationStore.camera.zoom
+    if (Math.abs(back) > 1e-6) simulationStore.zoomCamera?.(back)
+    highlightActive.value = false
+    try {
+      // eslint-disable-next-line no-console
+      if (uiPrefs.isLogOn?.('action_notice'))
+        console.debug('[ActionNotice] restored', {
+          camRestored: {
+            x: simulationStore.camera.x,
+            y: simulationStore.camera.y,
+            z: simulationStore.camera.zoom,
+          },
+        })
+    } catch {}
+  }, hold)
+}
 
 // Speed selector (bottom-left overlay) -> discrete slider
 const speedOptions = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -205,6 +315,11 @@ onMounted(() => {
   if (canvasRef.value) {
     // Initialize WebGL context with our canvas
     initWebGL(canvasRef.value)
+    // Ensure simulation auto-starts on initial mount if not already running
+    if (!unref(simulationStore.isRunning)) {
+      simulationStore.log('[Renderer] Auto-start simulation on mount', { ts: Date.now() })
+      simulationStore.startSimulation?.()
+    }
 
     const loop = () => {
       if (!rafActive) return
@@ -302,6 +417,10 @@ onMounted(() => {
 
   // Keyboard shortcut: Cmd + Ctrl + C copies debug text
   window.addEventListener('keydown', handleKeyDown)
+  // Action-notice listener
+  // eslint-disable-next-line no-console
+  console.warn('[ActionNotice][probe] registering window listener')
+  window.addEventListener('action-notice', handleActionNotice as any)
 })
 
 onBeforeUnmount(() => {
@@ -322,6 +441,11 @@ onBeforeUnmount(() => {
     canvasRef.value.removeEventListener('touchend', handleTouchEnd, passiveOpts)
   }
   window.removeEventListener('keydown', handleKeyDown)
+  // eslint-disable-next-line no-console
+  console.warn('[ActionNotice][probe] unregistering window listener')
+  window.removeEventListener('action-notice', handleActionNotice as any)
+  // Fully dispose WebGL resources and context
+  disposeWebGL()
 })
 
 // Mouse event handlers (pan/select) and click selection logic
@@ -453,13 +577,14 @@ function handleClick(event: MouseEvent) {
   if (!creature) {
     creature = pickNearestWithinTol(x, y, tol)
   }
-  console.debug('[EcosystemRenderer] click world', {
-    x,
-    y,
-    found: !!creature,
-    id: creature?.id,
-    tol,
-  })
+  if (uiPrefs.isLogOn?.('input'))
+    console.debug('[EcosystemRenderer] click world', {
+      x,
+      y,
+      found: !!creature,
+      id: creature?.id,
+      tol,
+    })
   if (creature) {
     simulationStore.setSelectedCreature(creature.id)
     emit('creature-selected', creature)
@@ -501,7 +626,18 @@ function pickNearestWithinTol(x: number, y: number, tol: number) {
 function handleWheel(event: WheelEvent) {
   event.preventDefault()
   const delta = Math.sign(event.deltaY) * -0.1
+  const before = simulationStore.camera.zoom
   simulationStore.zoomCamera(delta)
+  try {
+    // eslint-disable-next-line no-console
+    if (uiPrefs.isLogOn?.('input'))
+      console.debug('[Input] wheel', {
+        deltaY: event.deltaY,
+        delta,
+        before,
+        after: simulationStore.camera.zoom,
+      })
+  } catch {}
 }
 
 // Touch event handlers for mobile support
@@ -597,6 +733,14 @@ function handleTouchEnd(event: TouchEvent) {
   </div>
   <!-- Cost telemetry overlay (top-right) -->
   <CostTelemetryOverlay v-if="showTelemetry" />
+  <!-- Action Notice highlight -->
+  <div
+    v-if="highlightActive"
+    class="pointer-events-none absolute z-50"
+    :style="{ left: highlightX + 'px', top: highlightY + 'px', transform: 'translate(-50%, -50%)' }"
+  >
+    <div class="w-12 h-12 rounded-full border-4 border-yellow-400 animate-ping opacity-80"></div>
+  </div>
   <!-- Optional tooltip element (currently unused) -->
   <div
     id="tooltip"

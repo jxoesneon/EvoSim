@@ -1,5 +1,7 @@
 let frameIndex = 0
+let lastAppliedZoom = -1
 import * as THREE from 'three'
+import { useUiPrefs } from '@/composables/useUiPrefs'
 import {
   useSimulationStore,
   type Creature,
@@ -9,6 +11,7 @@ import {
 
 // WebGL renderer state
 let renderer: any
+let currentCanvas: HTMLCanvasElement | null = null
 let scene: THREE.Scene
 let camera: THREE.OrthographicCamera
 let terrainTexture: THREE.Texture | null = null
@@ -19,10 +22,15 @@ let plantMesh: THREE.InstancedMesh | null = null
 let corpseMesh: THREE.InstancedMesh | null = null
 let selectionRing: THREE.Mesh | null = null
 let visionMesh: THREE.InstancedMesh | null = null
+// Action range rings (separate meshes by diet color for simplicity)
+let actionRangeHerbMesh: THREE.InstancedMesh | null = null
+let actionRangeCarnMesh: THREE.InstancedMesh | null = null
 let creatureCount = 0
 let plantCount = 0
 let corpseCount = 0
 let visionCount = 0
+let actionRangeHerbCount = 0
+let actionRangeCarnCount = 0
 let creatureStart = 0
 let plantStart = 0
 let corpseStart = 0
@@ -37,6 +45,8 @@ let currentFps = 0
 let lastAdaptTime = 0
 // Vision update chunk cursor
 let visionStart = 0
+let actionRangeHerbStart = 0
+let actionRangeCarnStart = 0
 // Cache for vision cone base width per creature (to avoid per-frame trig)
 const visionWidthCache = new Map<string, { fovDeg: number; range: number; baseWidth: number }>()
 // Whether we've performed an initial full transform update for current vision mesh
@@ -51,6 +61,19 @@ const VISION_SPACING = 0.95 // multiply half-angle by this to create a small gap
 const VISION_JITTER_DEG = 1.2 // tiny deterministic jitter to avoid uniform overlaps
 const FEATHER_RADIAL = 0.06 // radial feather (0..1 of radius)
 const FEATHER_ANGULAR_RAD = 0.08 // angular feather in radians
+
+// During Vite HMR, ensure previous GL resources are disposed to avoid context conflicts
+// This prevents errors like "existing context of a different type" on the same canvas
+// when the module is reloaded.
+try {
+  if ((import.meta as any)?.hot) {
+    ;(import.meta as any).hot.dispose(() => {
+      try {
+        disposeWebGL()
+      } catch {}
+    })
+  }
+} catch {}
 
 function hash01(s: string): number {
   // simple deterministic string hash to [0,1)
@@ -255,18 +278,50 @@ function perlin2(x: number, y: number) {
 
 // Initialize WebGL context
 export function initWebGL(canvas: HTMLCanvasElement): void {
+  // Guard: if already initialized for this canvas, do nothing
+  if (renderer && currentCanvas === canvas) {
+    return
+  }
+  // If a different canvas is passed after initialization, dispose prior context first
+  if (renderer && currentCanvas && currentCanvas !== canvas) {
+    disposeWebGL()
+  }
   // Create a new WebGL renderer
   const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
   const isTestEnv = /jsdom|node/i.test(ua)
+
+  // Helper to attempt GL acquisition with graceful fallback from WebGL2 to WebGL1
+  const attemptAcquireGL = (): any => {
+    // Prefer WebGL2, fallback to WebGL1; both calls return the existing context if already created
+    const gl2 = canvas.getContext('webgl2', { antialias: true, alpha: true }) as any
+    const gl = (gl2 || canvas.getContext('webgl', { antialias: true, alpha: true })) as any
+    return gl || null
+  }
+
   try {
     if (isTestEnv) {
       throw new Error('Headless test environment')
     }
+    let gl: any = null
+    try {
+      gl = attemptAcquireGL()
+    } catch {
+      // If the canvas has a conflicting context (e.g., after HMR), dispose and retry once
+      try {
+        disposeWebGL()
+      } catch {}
+      gl = attemptAcquireGL()
+    }
+    if (!gl) {
+      throw new Error('Failed to acquire WebGL/WebGL2 context')
+    }
     renderer = new THREE.WebGLRenderer({
       canvas,
+      context: gl,
       antialias: true,
       alpha: true,
     })
+    currentCanvas = canvas
     renderer.setPixelRatio(window.devicePixelRatio)
     // Use the actual canvas size, not the window size
     const cw = canvas.clientWidth || canvas.width
@@ -280,6 +335,7 @@ export function initWebGL(canvas: HTMLCanvasElement): void {
       setSize: (_w: number, _h: number) => {},
       render: (_scene: any, _camera: any) => {},
     }
+    currentCanvas = canvas
     // Avoid throwing in tests
     // console.warn('Running in headless mode (no WebGL). Rendering is disabled.')
   }
@@ -318,6 +374,116 @@ export function initWebGL(canvas: HTMLCanvasElement): void {
   scene.add(selectionRing)
 
   // Vision cones are created on-demand via ensureVisionMesh()
+}
+
+// Dispose all WebGL/THREE resources and detach listeners
+export function disposeWebGL(): void {
+  try {
+    // Remove window resize listener
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', onWindowResize)
+    }
+    // Remove and dispose meshes
+    if (scene) {
+      if (creatureMesh) {
+        scene.remove(creatureMesh)
+        creatureMesh.geometry?.dispose?.()
+        ;(creatureMesh.material as THREE.Material | undefined)?.dispose?.()
+        creatureMesh = null
+      }
+      if (plantMesh) {
+        scene.remove(plantMesh)
+        plantMesh.geometry?.dispose?.()
+        ;(plantMesh.material as THREE.Material | undefined)?.dispose?.()
+        plantMesh = null
+      }
+      if (corpseMesh) {
+        scene.remove(corpseMesh)
+        corpseMesh.geometry?.dispose?.()
+        ;(corpseMesh.material as THREE.Material | undefined)?.dispose?.()
+        corpseMesh = null
+      }
+      if (visionMesh) {
+        scene.remove(visionMesh)
+        visionMesh.geometry?.dispose?.()
+        ;(visionMesh.material as THREE.Material | undefined)?.dispose?.()
+        visionMesh = null
+      }
+      if (actionRangeHerbMesh) {
+        scene.remove(actionRangeHerbMesh)
+        actionRangeHerbMesh.geometry?.dispose?.()
+        ;(actionRangeHerbMesh.material as THREE.Material | undefined)?.dispose?.()
+        actionRangeHerbMesh = null
+      }
+      if (actionRangeCarnMesh) {
+        scene.remove(actionRangeCarnMesh)
+        actionRangeCarnMesh.geometry?.dispose?.()
+        ;(actionRangeCarnMesh.material as THREE.Material | undefined)?.dispose?.()
+        actionRangeCarnMesh = null
+      }
+      if (selectionRing) {
+        scene.remove(selectionRing)
+        selectionRing.geometry?.dispose?.()
+        ;(selectionRing.material as THREE.Material | undefined)?.dispose?.()
+        selectionRing = null
+      }
+      if (weatherMesh) {
+        scene.remove(weatherMesh)
+        ;(weatherMesh.material as THREE.Material | undefined)?.dispose?.()
+        weatherMesh = null
+      }
+    }
+    // Dispose textures
+    if (terrainTexture) {
+      terrainTexture.dispose()
+      terrainTexture = null
+    }
+    if (weatherTexture) {
+      weatherTexture.dispose()
+      weatherTexture = null
+    }
+    // Dispose renderer and force context loss when possible
+    if (renderer) {
+      try {
+        const gl: WebGLRenderingContext | WebGL2RenderingContext | undefined =
+          typeof renderer.getContext === 'function' ? (renderer.getContext() as any) : undefined
+        if (gl && typeof (gl as any).getExtension === 'function') {
+          const ext = (gl as any).getExtension('WEBGL_lose_context')
+          if (ext && typeof ext.loseContext === 'function') {
+            try {
+              ext.loseContext()
+            } catch {}
+          }
+        }
+      } catch {}
+      try {
+        if (typeof renderer.dispose === 'function') renderer.dispose()
+      } catch {}
+    }
+  } finally {
+    // Reset state
+    renderer = null
+    currentCanvas = null
+    scene = undefined as any
+    camera = undefined as any
+    creatureCount = 0
+    plantCount = 0
+    corpseCount = 0
+    visionCount = 0
+    visionStart = 0
+    visionWidthCache.clear()
+    visionPrimed = false
+    weatherPhase = 0
+    headless = false
+    actionRangeHerbCount = 0
+    actionRangeCarnCount = 0
+    actionRangeHerbStart = 0
+    actionRangeCarnStart = 0
+  }
+}
+
+export function isHeadless(): boolean {
+  return headless
 }
 
 function onWindowResize() {
@@ -501,11 +667,35 @@ export function renderScene(
     if (!visionPrimed && visionTotal > 0) {
       updateVisionInstances(creatures)
       visionPrimed = true
-      if ((import.meta as any).env?.DEV) console.debug('[Vision] primed with eyes=', visionTotal)
+      try {
+        const uiPrefs = useUiPrefs()
+        if (uiPrefs.isLogOn?.('vision'))
+          console.debug('[Vision] primed with eyes=', visionTotal)
+      } catch {}
     }
   } else {
     ensureVisionMesh(0)
     visionPrimed = false
+  }
+
+  // Action range overlay
+  const ui = useUiPrefs()
+  const aro = ui.getActionRangeOverlay?.()
+  const showActionRanges = !!(aro && aro.enabled)
+  if (showActionRanges) {
+    // Partition counts by diet for separate colored meshes
+    let herbCount = 0
+    let carnCount = 0
+    for (let i = 0; i < creatures.length; i++) {
+      const diet = ((creatures[i] as any)?.phenotype?.diet || 'Herbivore') as string
+      if (diet === 'Carnivore') carnCount++
+      else herbCount++
+    }
+    ensureActionRangeMeshes(herbCount, carnCount, aro)
+    if (actionRangeHerbMesh) (actionRangeHerbMesh as any).count = herbCount
+    if (actionRangeCarnMesh) (actionRangeCarnMesh as any).count = carnCount
+  } else {
+    ensureActionRangeMeshes(0, 0, { alpha: 0.2, thin: true } as any)
   }
 
   const cameraState = simStore.camera
@@ -543,6 +733,18 @@ export function renderScene(
   camera.position.y = y
   camera.zoom = z
   camera.updateProjectionMatrix()
+  if (Math.abs(z - lastAppliedZoom) > 1e-6) {
+    try {
+      const uiPrefs = useUiPrefs()
+      if (uiPrefs.isLogOn?.('renderer'))
+        console.debug('[Renderer] apply zoom', {
+          desired: cameraState.zoom,
+          applied: z,
+          prevApplied: lastAppliedZoom,
+        })
+    } catch {}
+    lastAppliedZoom = z
+  }
 
   // Update instances (throttled + chunked)
   frameIndex++
@@ -564,6 +766,21 @@ export function renderScene(
     // Vision cones (optional)
     if (showVC && creatures.length > 0) {
       visionStart = updateVisionInstancesChunk(creatures, visionStart, chunk)
+    }
+    // Action ranges (optional)
+    if (showActionRanges && creatures.length > 0) {
+      actionRangeHerbStart = updateActionRangeInstancesChunk(
+        creatures,
+        actionRangeHerbStart,
+        chunk,
+        /*diet*/ 'Herbivore',
+      )
+      actionRangeCarnStart = updateActionRangeInstancesChunk(
+        creatures,
+        actionRangeCarnStart,
+        chunk,
+        /*diet*/ 'Carnivore',
+      )
     }
   }
 
@@ -806,7 +1023,158 @@ function ensureVisionMesh(count: number) {
   visionStart = 0
   visionWidthCache.clear()
   visionPrimed = false
-  if ((import.meta as any).env?.DEV) console.debug('[Vision] ensureVisionMesh count=', count)
+  try {
+    const uiPrefs = useUiPrefs()
+    if (uiPrefs.isLogOn?.('vision')) console.debug('[Vision] ensureVisionMesh count=', count)
+  } catch {}
+}
+
+// Cached overlay appearance for action ranges
+let actionRangeLastThin = true
+let actionRangeLastAlpha = 0.2
+
+// Ensure action range instanced meshes (separate by diet) exist and are configured
+function ensureActionRangeMeshes(
+  herbCount: number,
+  carnCount: number,
+  aro: { alpha?: number; thin?: boolean } | undefined,
+) {
+  const alpha = Number(aro?.alpha ?? actionRangeLastAlpha)
+  const thin = aro?.thin ?? actionRangeLastThin
+  const anyTypeOn = (() => {
+    const bt: any = (aro as any)?.byType
+    if (!bt) return true
+    const keys = Object.keys(bt)
+    if (keys.length === 0) return true
+    for (const k of keys) if (bt[k] !== false) return true
+    return false
+  })()
+
+  // Helper to (re)create an instanced ring mesh
+  const createRingMesh = (
+    count: number,
+    color: THREE.Color | number,
+  ): THREE.InstancedMesh | null => {
+    if (count <= 0) return null
+    // Unit ring around radius=1, scaled per instance
+    const outer = 1.0
+    const inner = thin ? Math.max(0.0, outer - 0.06) : Math.max(0.0, outer - 0.25)
+    const geo = new THREE.RingGeometry(inner, outer, 48)
+    const mat = new THREE.MeshBasicMaterial({
+      color: color as any,
+      transparent: true,
+      opacity: Math.max(0, Math.min(1, alpha)),
+      depthWrite: false,
+      depthTest: false,
+      side: THREE.DoubleSide,
+    })
+    const mesh = new THREE.InstancedMesh(geo, mat, count)
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+    mesh.frustumCulled = false
+    mesh.renderOrder = 7
+    mesh.visible = true
+    return mesh
+  }
+
+  // Recreate meshes if counts changed or appearance toggles changed
+  const needRebuildHerb = !actionRangeHerbMesh || (actionRangeHerbMesh as any).count !== herbCount || thin !== actionRangeLastThin
+  const needRebuildCarn = !actionRangeCarnMesh || (actionRangeCarnMesh as any).count !== carnCount || thin !== actionRangeLastThin
+
+  if (needRebuildHerb) {
+    if (actionRangeHerbMesh) {
+      scene.remove(actionRangeHerbMesh)
+      actionRangeHerbMesh.geometry?.dispose?.()
+      ;(actionRangeHerbMesh.material as THREE.Material | undefined)?.dispose?.()
+      actionRangeHerbMesh = null
+    }
+    if (herbCount > 0) {
+      actionRangeHerbMesh = createRingMesh(herbCount, new THREE.Color(0.2, 0.9, 0.4))
+      if (actionRangeHerbMesh) {
+        actionRangeHerbMesh.userData.type = 'action_range_herb'
+        scene.add(actionRangeHerbMesh)
+        actionRangeHerbCount = herbCount
+        actionRangeHerbStart = 0
+      }
+    } else {
+      actionRangeHerbCount = 0
+      actionRangeHerbStart = 0
+    }
+  }
+
+  if (needRebuildCarn) {
+    if (actionRangeCarnMesh) {
+      scene.remove(actionRangeCarnMesh)
+      actionRangeCarnMesh.geometry?.dispose?.()
+      ;(actionRangeCarnMesh.material as THREE.Material | undefined)?.dispose?.()
+      actionRangeCarnMesh = null
+    }
+    if (carnCount > 0) {
+      actionRangeCarnMesh = createRingMesh(carnCount, new THREE.Color(0.95, 0.25, 0.25))
+      if (actionRangeCarnMesh) {
+        actionRangeCarnMesh.userData.type = 'action_range_carn'
+        scene.add(actionRangeCarnMesh)
+        actionRangeCarnCount = carnCount
+        actionRangeCarnStart = 0
+      }
+    } else {
+      actionRangeCarnCount = 0
+      actionRangeCarnStart = 0
+    }
+  }
+
+  // Update opacity live if meshes exist and alpha changed
+  if (actionRangeHerbMesh && actionRangeLastAlpha !== alpha) {
+    const m = actionRangeHerbMesh.material as THREE.MeshBasicMaterial
+    if (m) m.opacity = Math.max(0, Math.min(1, alpha))
+  }
+  if (actionRangeCarnMesh && actionRangeLastAlpha !== alpha) {
+    const m = actionRangeCarnMesh.material as THREE.MeshBasicMaterial
+    if (m) m.opacity = Math.max(0, Math.min(1, alpha))
+  }
+
+  // Respect per-action type toggles by controlling visibility
+  if (actionRangeHerbMesh) actionRangeHerbMesh.visible = anyTypeOn
+  if (actionRangeCarnMesh) actionRangeCarnMesh.visible = anyTypeOn
+
+  actionRangeLastThin = thin
+  actionRangeLastAlpha = alpha
+}
+
+// Chunked updater for action range rings per diet
+function updateActionRangeInstancesChunk(
+  creatures: readonly Creature[],
+  start: number,
+  chunk: number,
+  diet: 'Herbivore' | 'Carnivore',
+): number {
+  const mesh = diet === 'Carnivore' ? actionRangeCarnMesh : actionRangeHerbMesh
+  if (!mesh) return 0
+  const len = creatures.length
+  if (len === 0) return 0
+
+  // Build filtered indices for selected diet
+  const indices: number[] = []
+  for (let i = 0; i < len; i++) {
+    const d = (((creatures[i] as any)?.phenotype?.diet || 'Herbivore') as string) === 'Carnivore' ? 'Carnivore' : 'Herbivore'
+    if (d === diet) indices.push(i)
+  }
+  if (indices.length === 0) return 0
+
+  const end = Math.min(indices.length, start + chunk)
+  // Update only the subset [start, end) within the filtered list
+  for (let k = start; k < end; k++) {
+    const ci = indices[k]
+    const c = creatures[ci]
+    // TODO: replace with true per-action-type max range when available; using a heuristic for now
+    const base = Math.max(2, c.radius * 3)
+    tmpMatrix
+      .makeTranslation(c.x, c.y, 1.4)
+      .multiply(tmpScaleMatrix.makeScale(base, base, 1))
+    mesh.setMatrixAt(k, tmpMatrix)
+  }
+  mesh.instanceMatrix.needsUpdate = true
+  const next = end >= indices.length ? 0 : end
+  return next
 }
 
 // Update per-instance transforms/colors

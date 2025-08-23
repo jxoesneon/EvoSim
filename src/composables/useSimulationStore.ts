@@ -3,6 +3,7 @@ import getZegionSpec from '@/zegion/io/spec'
 import { RNG } from '@/zegion/utils/seeding'
 import ActivationRegistry, { type ActivationName } from '@/zegion/activations'
 import { useNameService } from '@/composables/useNameService'
+import { useUiPrefs } from '@/composables/useUiPrefs'
 
 // Interfaces for our simulation entities
 export interface Camera {
@@ -142,6 +143,8 @@ function createStore() {
   const generation = ref(1)
   const stagnantTicks = ref(0)
   const movementStats = reactive({ avgSpeed: 0 })
+  // UI preferences (for logging gates, etc.)
+  const uiPrefs = useUiPrefs()
   // Track current generation start (real timestamp, ms since epoch)
   const currentGenStartTs = ref<number>(Date.now())
   // Lightweight telemetry (no deps): ring buffers and counters
@@ -707,7 +710,7 @@ function createStore() {
     if (arr.length > MAX_EVENTS_PER_CREATURE) arr.splice(0, arr.length - MAX_EVENTS_PER_CREATURE)
     // Dev visibility: log and emit a browser event for overlays/listeners
     try {
-      if ((import.meta as any).env?.DEV) {
+      if ((import.meta as any).env?.DEV && uiPrefs.isLogOn?.('creature_event')) {
         // eslint-disable-next-line no-console
         console.debug('[CreatureEvent]', id, ev.type, ev.key, ev.label || '', new Date(ev.ts).toISOString())
       }
@@ -716,6 +719,22 @@ function createStore() {
       }
     } catch {}
   }
+
+  // Debug-only dispatcher: keep debug emissions separate from real events
+  // Does not mutate telemetry totals or persistent history arrays
+  function pushCreatureEventDebug(id: string, ev: CreatureEvent) {
+    if (!id) return
+    try {
+      if ((import.meta as any).env?.DEV && uiPrefs.isLogOn?.('creature_event')) {
+        // eslint-disable-next-line no-console
+        console.debug('[CreatureEvent][debug]', id, ev.type, ev.key, ev.label || '', new Date(ev.ts).toISOString())
+      }
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('creature-event-debug', { detail: { id, ev } }))
+    }
+  }
+
   function shouldEmitEvent(id: string, key: CreatureEventKey, minIntervalMs = 1500): boolean {
     const arr = creatureEvents[id]
     if (!arr || arr.length === 0) return true
@@ -1012,6 +1031,11 @@ function createStore() {
     noiseStressPenaltyPerSec: 0.0, // scales with weather.noise01
     diseaseEnergyDrainPerSec: 0.0, // placeholder constant drain
 
+    // Locomotion core coefficients (referenced in energy model and WASM parity checks)
+    moveCostCoeffPerSpeedPerSec: 0.05, // energy per unit speed per second
+    turnCostCoeffPerRadPerSec: 0.01, // energy per radian turn per second
+    accelerationCostCoeffPerAccelPerSec: 0.02, // energy per accel magnitude per second
+
     // --- Corpse decay tunables ---
     // Formula parity with WASM (see README Telemetry section):
     // base = max(0, corpseBaseDecayPerSec)
@@ -1025,12 +1049,7 @@ function createStore() {
     corpseTempDecayCoeff: 0.5, // scales with warm delta above 10C
     corpseHumidityDecayCoeff: 0.2, // scales with humidity01
     corpseRainDecayCoeff: 0.3, // scales with precipitation01
-    corpseWetnessDecayCoeff: 0.2, // scales with terrain.wetness01
-
-    // Locomotion costs
-    moveCostCoeffPerSpeedPerSec: 0.06,
-    turnCostCoeffPerRadPerSec: 0.02,
-    accelerationCostCoeffPerAccelPerSec: 0.03,
+    corpseWetnessDecayCoeff: 0.2,
     sprintStaminaDrainPerSpeedPerSec: 0.12,
     sprintEnergyOverflowCoeff: 0.5,
     panicLocomotionCostMultiplier: 1.3,
@@ -1475,7 +1494,28 @@ function createStore() {
         const wc: any[] = wasmWorld.creatures_json?.() ?? []
         const wp: any[] = wasmWorld.plants_json?.() ?? []
         const wco: any[] = wasmWorld.corpses_json?.() ?? []
-        creatures.value = wc.map((c: any) => {
+        // If WASM did not seed a new population, seed it here and resync
+        let newWc = wc
+        let newWp = wp
+        try {
+          if ((!Array.isArray(newWc) || newWc.length === 0) && typeof wasmWorld.spawn_creature === 'function') {
+            for (let i = 0; i < (simulationParams.initialCreatures || 0); i++) {
+              const x = Math.random() * 2000
+              const y = Math.random() * 2000
+              wasmWorld.spawn_creature(x, y)
+            }
+            newWc = wasmWorld.creatures_json?.() ?? []
+          }
+          if ((!Array.isArray(newWp) || newWp.length === 0) && typeof wasmWorld.spawn_plant === 'function') {
+            for (let i = 0; i < (simulationParams.initialPlants || 0); i++) {
+              const x = Math.random() * 2000
+              const y = Math.random() * 2000
+              wasmWorld.spawn_plant(x, y, 3)
+            }
+            newWp = wasmWorld.plants_json?.() ?? []
+          }
+        } catch {}
+        creatures.value = newWc.map((c: any) => {
           const diet = c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore'
           const visionBase = computeVisionPhenotypeGlobal(c.genes || {}, diet)
           const varied =
@@ -1538,7 +1578,7 @@ function createStore() {
             isSprinting: false,
           } as Creature
         })
-        plants.value = wp.map((p: any) => ({ x: p.x, y: p.y, radius: p.radius }))
+        plants.value = newWp.map((p: any) => ({ x: p.x, y: p.y, radius: p.radius }))
         corpses.value = (wco ?? []).map((co: any) => ({
           x: co.x,
           y: co.y,
@@ -3061,33 +3101,69 @@ function createStore() {
               label: 'Loses corpse from proximity',
             })
           }
-          ;(c as any)._ev_prev_nearCorpse = nearCorpse
 
           // Heuristic actions based on recent deltas and proximity
-          if (de > 1.0) {
+          if (de > simulationParams.energyGainEatThreshold) {
             const diet = c.phenotype?.diet || 'Herbivore'
             if (
               nearFoodPlant &&
               diet === 'Herbivore' &&
               shouldEmitEvent(c.id, 'eats_plant', 2500)
             ) {
-              pushCreatureEvent(c.id, {
-                ts: Date.now(),
-                type: 'action',
-                key: 'eats_plant',
-                label: 'Eats plant',
-              })
-            } else if (
-              nearCorpse &&
-              diet === 'Carnivore' &&
-              shouldEmitEvent(c.id, 'eats_corpse', 2500)
-            ) {
-              pushCreatureEvent(c.id, {
-                ts: Date.now(),
-                type: 'action',
-                key: 'eats_corpse',
-                label: 'Eats from corpse',
-              })
+              // Remove the nearest plant within interaction radius and emit global notice with location
+              try {
+                const plantArr = plants.value
+                let bestIdx = -1
+                let bestD = Infinity
+                let bestP: any = null
+                for (let i = 0; i < plantArr.length; i++) {
+                  const p = plantArr[i]
+                  const d = Math.hypot(p.x - c.x, p.y - c.y)
+                  if (d < bestD) {
+                    bestD = d
+                    bestP = p
+                    bestIdx = i
+                  }
+                }
+                const eatTol = Math.max(4, c.radius + (bestP?.radius || 3) + 2)
+                if (bestIdx >= 0 && bestD <= eatTol) {
+                  // Confirmed consume within tolerance
+                  pushCreatureEvent(c.id, {
+                    ts: Date.now(),
+                    type: 'action',
+                    key: 'eats_plant',
+                    label: 'Eats plant',
+                  })
+                  telemetry.totals.eats_plant++
+                  const eaten = plantArr[bestIdx]
+                  plants.value = [
+                    ...plantArr.slice(0, bestIdx),
+                    ...plantArr.slice(bestIdx + 1),
+                  ]
+                  if (typeof window !== 'undefined') {
+                    // TEMP probe: confirm dispatch of action-notice
+                    try {
+                      // eslint-disable-next-line no-console
+                      console.log('[ActionNotice][probe][dispatch] about to dispatch', {
+                        type: 'eats_plant', x: eaten.x, y: eaten.y, by: c.id,
+                      })
+                    } catch {}
+                    window.dispatchEvent(
+                      new CustomEvent('action-notice', {
+                        detail: { type: 'eats_plant', x: eaten.x, y: eaten.y, by: c.id },
+                      }),
+                    )
+                  }
+                } else {
+                  // Attempted but not within tolerance -> label attempt only, no totals or action-notice
+                  pushCreatureEvent(c.id, {
+                    ts: Date.now(),
+                    type: 'action',
+                    key: 'eats_plant',
+                    label: 'Attempts to eat plant',
+                  })
+                }
+              } catch {}
             }
           }
 
@@ -3377,6 +3453,7 @@ function createStore() {
     const worldHalf = 1000
     const visibleHalfWidth = worldHalf / camera.zoom
     const visibleHalfHeight = worldHalf / aspect / camera.zoom
+    const before = { x: camera.x, y: camera.y, z: camera.zoom }
 
     // If the visible half-extents exceed the world half, pin the center to world center
     if (visibleHalfWidth >= worldHalf) {
@@ -3394,19 +3471,50 @@ function createStore() {
       const maxY = 2000 - visibleHalfHeight
       camera.y = Math.min(Math.max(camera.y, minY), maxY)
     }
+    // eslint-disable-next-line no-console
+    try {
+      const uiPrefs = useUiPrefs()
+      if (uiPrefs.isLogOn?.('camera'))
+        console.debug('[Camera] clampCameraToWorld', {
+          before,
+          after: { x: camera.x, y: camera.y, z: camera.zoom },
+          visibleHalfWidth,
+          visibleHalfHeight,
+          aspect,
+        })
+    } catch {}
   }
 
   function centerCameraOn(x: number, y: number) {
+    const before = { x: camera.x, y: camera.y, z: camera.zoom }
     camera.x = x
     camera.y = y
     clampCameraToWorld()
+    // eslint-disable-next-line no-console
+    try {
+      const uiPrefs = useUiPrefs()
+      if (uiPrefs.isLogOn?.('camera'))
+        console.debug('[Camera] centerCameraOn', { before, target: { x, y }, after: { x: camera.x, y: camera.y, z: camera.zoom } })
+    } catch {}
   }
 
   function moveCamera(dx: number, dy: number) {
     // Convert screen-space delta to world-space using current zoom
+    const before = { x: camera.x, y: camera.y, z: camera.zoom }
     camera.x -= dx / camera.zoom
     camera.y += dy / camera.zoom
     clampCameraToWorld()
+    // eslint-disable-next-line no-console
+    try {
+      const uiPrefs = useUiPrefs()
+      if (uiPrefs.isLogOn?.('camera'))
+        console.debug('[Camera] moveCamera', {
+          before,
+          dx,
+          dy,
+          after: { x: camera.x, y: camera.y, z: camera.zoom },
+        })
+    } catch {}
   }
 
   function zoomCamera(delta: number) {
@@ -3421,7 +3529,22 @@ function createStore() {
     const maxZoom = 5
 
     // Apply zoom limits
-    const newZoom = Math.max(minZoom, Math.min(maxZoom, camera.zoom + delta))
+    const before = camera.zoom
+    const requested = camera.zoom + delta
+    const newZoom = Math.max(minZoom, Math.min(maxZoom, requested))
+    try {
+      const uiPrefs = useUiPrefs()
+      if (uiPrefs.isLogOn?.('camera'))
+        console.debug('[Camera] zoomCamera', {
+          before,
+          delta,
+          requested,
+          newZoom,
+          minZoom,
+          maxZoom,
+          aspect,
+        })
+    } catch {}
     camera.zoom = newZoom
 
     // After zooming, clamp camera so the viewport remains inside bounds
@@ -3577,30 +3700,27 @@ function createStore() {
         centerCameraOn?.(c.x, c.y)
       } catch {}
       const now = Date.now()
-      // Emit a few events for visual verification
-      pushCreatureEvent(id, { ts: now - 1, type: 'event', key: 'birth', label: 'Birth (debug)' })
-      pushCreatureEvent(id, { ts: now, type: 'action', key: 'attacks', label: 'Attacks (debug)' })
-      telemetry.totals.attacks++
-      pushCreatureEvent(id, {
+      // Emit a few debug events for visual verification (separate channel)
+      pushCreatureEventDebug(id, { ts: now - 1, type: 'event', key: 'birth', label: 'Birth (debug)' })
+      pushCreatureEventDebug(id, { ts: now, type: 'action', key: 'attacks', label: 'Attacks (debug)' })
+      pushCreatureEventDebug(id, {
         ts: now + 50,
         type: 'action',
         key: 'gets_hit',
         label: 'Gets hit (debug)',
       })
-      telemetry.totals.gets_hit++
-      pushCreatureEvent(id, {
+      pushCreatureEventDebug(id, {
         ts: now + 100,
         type: 'action',
         key: 'eats_plant',
         label: 'Eats plant (debug)',
       })
-      telemetry.totals.eats_plant++
       // Schedule death to verify cleanup and death event path
       setTimeout(() => {
         const cc = creatures.value.find((k: any) => k.id === id)
         if (cc) {
           // Push explicit death event for visibility, then apply health=0 to exercise cleanup path
-          pushCreatureEvent(id, {
+          pushCreatureEventDebug(id, {
             ts: Date.now(),
             type: 'event',
             key: 'death',

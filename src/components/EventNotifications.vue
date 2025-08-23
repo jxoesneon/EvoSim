@@ -65,10 +65,13 @@ function onCreatureEvent(e: Event) {
 
 onMounted(() => {
   window.addEventListener('creature-event', onCreatureEvent as EventListener)
+  // Also listen for debug-only events emitted by debug helpers
+  window.addEventListener('creature-event-debug', onCreatureEvent as EventListener)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('creature-event', onCreatureEvent as EventListener)
+  window.removeEventListener('creature-event-debug', onCreatureEvent as EventListener)
 })
 </script>
 

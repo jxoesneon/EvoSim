@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import {
   PlayIcon,
   StopIcon,
@@ -8,33 +8,57 @@ import {
   ArrowUpTrayIcon,
 } from '@heroicons/vue/24/solid'
 import { useSimulationStore } from '../composables/useSimulationStore'
+import { useUiPrefs } from '../composables/useUiPrefs'
 
 const emit = defineEmits(['start', 'stop', 'reset', 'add-creature', 'add-plant', 'save', 'load'])
 
 const store = useSimulationStore()
+const prefs = useUiPrefs()
 const brainSeed = ref<number>(3735928559) // 0xDEADBEEF default
 function applySeed() {
   store.setBrainSeed?.(Number(brainSeed.value) >>> 0)
 }
 
-// Auto-continue toggle state mirrors store param; default ON
-const autoContinue = ref<boolean>(true)
+// Auto-continue toggle state mirrors store param; initialize from store (persisted)
+const autoContinue = ref<boolean>(store.simulationParams.autoContinueGenerations ?? true)
 function toggleAutoContinue() {
   autoContinue.value = !autoContinue.value
   store.setAutoContinueGenerations?.(autoContinue.value)
 }
 
-// Vision cones controls
+// Vision cones controls (read from store; persistence is owned by App.vue)
 const showVision = ref<boolean>(store.simulationParams.showVisionCones ?? true)
+const fovDeg = ref<number>(store.simulationParams.visionFovDeg ?? 90)
+const visionRange = ref<number>(store.simulationParams.visionRange ?? 80)
+
+// Sync persisted settings into the store on mount
+onMounted(() => {
+  console.log('[Vision][CP] onMounted apply to store', {
+    showVision: showVision.value,
+    fovDeg: fovDeg.value,
+    visionRange: visionRange.value,
+  })
+  store.setShowVisionCones?.(!!showVision.value)
+  store.setVisionFovDeg?.(Number(fovDeg.value))
+  store.setVisionRange?.(Number(visionRange.value))
+  console.log('[Vision][CP] applied to store', {
+    storeShow: (store.simulationParams as any).showVisionCones,
+    storeFov: (store.simulationParams as any).visionFovDeg,
+    storeRange: (store.simulationParams as any).visionRange,
+  })
+})
+
 function toggleVision() {
   showVision.value = !showVision.value
   store.setShowVisionCones?.(showVision.value)
+  console.log('[Vision][CP] toggleVision', { show: showVision.value })
 }
-const fovDeg = ref<number>(store.simulationParams.visionFovDeg ?? 90)
-const visionRange = ref<number>(store.simulationParams.visionRange ?? 80)
 function applyVisionParams() {
-  store.setVisionFovDeg?.(Number(fovDeg.value))
-  store.setVisionRange?.(Number(visionRange.value))
+  const f = Number(fovDeg.value)
+  const r = Number(visionRange.value)
+  store.setVisionFovDeg?.(f)
+  store.setVisionRange?.(r)
+  console.log('[Vision][CP] applyVisionParams', { fovDeg: f, range: r })
 }
 
 // Debugging tools
@@ -42,6 +66,28 @@ const showDebugOverlay = ref<boolean>(store.simulationParams.showDebugOverlay ??
 function toggleDebugOverlay() {
   showDebugOverlay.value = !showDebugOverlay.value
   store.setShowDebugOverlay?.(showDebugOverlay.value)
+}
+
+// Logs prefs (global + per-type pills)
+const logEnabled = ref<boolean>(!!(prefs.getLogging?.().enabled ?? true))
+const defaultTypes = {
+  action_notice: true,
+  camera: true,
+  renderer: true,
+  input: true,
+  world_to_screen: true,
+  vision: false,
+  ui_prefs: false,
+}
+const logTypes = ref<Record<string, boolean>>({ ...defaultTypes, ...(prefs.getLogging?.().types || {}) })
+function toggleLogsEnabled() {
+  logEnabled.value = !logEnabled.value
+  prefs.setLogging?.({ enabled: logEnabled.value })
+}
+function toggleLogType(key: string) {
+  const cur = !!logTypes.value[key]
+  logTypes.value[key] = !cur
+  prefs.setLogging?.({ types: { [key]: !cur } as any })
 }
 
 // Event/Feeling thresholds (compact controls)
@@ -77,6 +123,21 @@ function applyActivations() {
   store.setZegionActivations(selHidden.value as any, selOutput.value as any)
 }
 
+// Action Noticing controls
+const an = prefs.getActionNoticing?.() || { enabled: true, byAction: { eats_plant: true }, holdMs: 5000, zoom: 2 }
+const anEnabled = ref<boolean>(!!an.enabled)
+const anEatsPlant = ref<boolean>(an.byAction?.eats_plant !== false)
+const anHoldMs = ref<number>(Number(an.holdMs) || 5000)
+const anZoom = ref<number>(Number(an.zoom) || 2)
+function applyActionNoticing() {
+  prefs.setActionNoticing?.({
+    enabled: !!anEnabled.value,
+    byAction: { ...(an.byAction || {}), eats_plant: !!anEatsPlant.value },
+    holdMs: Math.max(250, Number(anHoldMs.value) || 5000),
+    zoom: Math.max(0.2, Number(anZoom.value) || 2),
+  })
+}
+
 // Download current simulation snapshot
 function onDownload() {
   store.downloadSimulation?.()
@@ -106,7 +167,7 @@ async function onFileChange(e: Event) {
 
 <template>
   <div
-    class="control-panel bg-white/80 backdrop-blur-md px-3 py-2 rounded-2xl shadow-xl border border-base-300 flex items-center gap-2"
+    class="control-panel bg-white/80 backdrop-blur-md px-3 py-2 rounded-2xl shadow-xl border border-base-300 flex items-center gap-2 overflow-x-auto whitespace-nowrap"
   >
     <!-- Primary controls -->
     <div class="btn-group">
@@ -122,6 +183,47 @@ async function onFileChange(e: Event) {
         <ArrowPathIcon class="w-4 h-4" />
         <span class="hidden md:inline ml-1">Reset</span>
       </button>
+    </div>
+
+    <!-- Action Noticing (dropdown for compact visibility) -->
+    <div class="dropdown dropdown-bottom">
+      <label tabindex="0" class="btn btn-xs md:btn-sm btn-outline">🔭 Action Noticing</label>
+      <div
+        tabindex="0"
+        class="dropdown-content z-[60] menu p-3 shadow bg-base-100 rounded-box w-72"
+      >
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm font-medium">Enabled</span>
+          <input type="checkbox" class="toggle toggle-xs" v-model="anEnabled" @change="applyActionNoticing" />
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm">eats_plant</span>
+          <input type="checkbox" class="toggle toggle-xs" v-model="anEatsPlant" @change="applyActionNoticing" />
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm">Hold (ms)</span>
+          <input
+            v-model.number="anHoldMs"
+            @change="applyActionNoticing"
+            type="number"
+            min="250"
+            step="250"
+            class="input input-2xs w-24"
+          />
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-sm">Zoom</span>
+          <input
+            v-model.number="anZoom"
+            @change="applyActionNoticing"
+            type="number"
+            min="0.2"
+            max="10"
+            step="0.1"
+            class="input input-2xs w-20"
+          />
+        </div>
+      </div>
     </div>
 
     <!-- Event thresholds (compact) -->
@@ -324,6 +426,7 @@ async function onFileChange(e: Event) {
         type="checkbox"
         class="toggle toggle-xs"
         :checked="showVision"
+        data-testid="vision-toggle"
         @change="toggleVision"
       />
       <span class="text-xs text-gray-600 ml-2">FOV</span>
@@ -333,6 +436,7 @@ async function onFileChange(e: Event) {
         min="10"
         max="180"
         class="input input-xs w-16"
+        data-testid="vision-fov"
         @change="applyVisionParams"
       />
       <span class="text-xs text-gray-600">Range</span>
@@ -342,6 +446,7 @@ async function onFileChange(e: Event) {
         min="5"
         max="500"
         class="input input-xs w-16"
+        data-testid="vision-range"
         @change="applyVisionParams"
       />
     </div>
@@ -361,6 +466,30 @@ async function onFileChange(e: Event) {
           @change="toggleDebugOverlay"
         />
       </label>
+      <!-- Logs controls -->
+      <div class="dropdown dropdown-bottom">
+        <label tabindex="0" class="btn btn-xs md:btn-sm btn-outline">🧪 Logs</label>
+        <div tabindex="0" class="dropdown-content z-[60] menu p-3 shadow bg-base-100 rounded-box w-80">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-sm font-medium">Enable all logs</span>
+            <input type="checkbox" class="toggle toggle-xs" :checked="logEnabled" @change="toggleLogsEnabled" />
+          </div>
+          <div class="text-xs text-gray-600 mb-1">Types</div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="(on, key) in logTypes"
+              :key="key"
+              class="btn btn-ghost btn-xs"
+              :class="on ? 'btn-active' : 'opacity-60'"
+              @click="toggleLogType(String(key))"
+            >
+              {{ String(key).replace(/_/g, ' ') }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
+
+    
   </div>
 </template>

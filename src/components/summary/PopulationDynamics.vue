@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref, watch, onMounted } from 'vue'
 import { useSimulationStore } from '../../composables/useSimulationStore'
 import { useUserPrefs } from '../../composables/useUserPrefs'
+import { useUiPrefs } from '../../composables/useUiPrefs'
 const UPlotStackedArea = defineAsyncComponent(() => import('./charts/UPlotStackedArea.vue'))
 
 const store = useSimulationStore()
@@ -24,11 +25,19 @@ function ensureSeries(arr: number[], fallback: number) {
 }
 
 // Legend toggles
-const hidden = ref<{ c: boolean; p: boolean; co: boolean }>({ c: false, p: false, co: false })
+const { getPopulationDynamics, setPopulationDynamics } = useUiPrefs()
+const popPrefs = getPopulationDynamics()
+const hidden = ref<{ c: boolean; p: boolean; co: boolean }>(
+  (popPrefs?.hidden as any) ?? { c: false, p: false, co: false },
+)
 
 // Smoothing
-const smoothing = ref(false)
-const smoothWin = ref<5 | 9 | 13>(5)
+const smoothing = ref<boolean>(
+  typeof popPrefs?.smoothing === 'boolean' ? popPrefs.smoothing : false,
+)
+const smoothWin = ref<5 | 9 | 13>((([5, 9, 13] as const).includes(popPrefs?.smoothWin as any)
+  ? (popPrefs?.smoothWin as any)
+  : 5) as 5 | 9 | 13)
 function smooth(arr: number[], win: number) {
   if (!smoothing.value) return arr
   const n = arr.length
@@ -48,7 +57,11 @@ function smooth(arr: number[], win: number) {
 }
 
 // Zoom window selector (simple): full, last 1000, last 200
-const windowSel = ref<'full' | '1k' | '200'>('full')
+const windowSel = ref<'full' | '1k' | '200'>(
+  (['full', '1k', '200'] as const).includes(popPrefs?.windowSel as any)
+    ? (popPrefs?.windowSel as any)
+    : 'full',
+)
 function sliceWindow(arr: number[]) {
   const n = arr.length
   if (windowSel.value === 'full') return arr
@@ -174,6 +187,16 @@ function exportUsingPreferred() {
   if (fmt === 'png') return downloadPng()
   return exportCsv()
 }
+
+// Persist watchers
+watch(
+  hidden,
+  (v) => setPopulationDynamics({ hidden: { ...v } }),
+  { deep: true },
+)
+watch(smoothing, (v) => setPopulationDynamics({ smoothing: !!v }))
+watch(smoothWin, (v) => setPopulationDynamics({ smoothWin: v }))
+watch(windowSel, (v) => setPopulationDynamics({ windowSel: v }))
 </script>
 <template>
   <div

@@ -1,17 +1,47 @@
 <script setup lang="ts">
-import { ref, watchEffect, computed, onBeforeUnmount } from 'vue'
+import { ref, watch, watchEffect, computed, onBeforeUnmount } from 'vue'
 import { useSimulationStore } from '../composables/useSimulationStore'
+import { useUiPrefs } from '../composables/useUiPrefs'
 
 const props = defineProps<{ creature?: Record<string, any> }>()
 
 const emit = defineEmits(['close'])
-const activeTab = ref<'stats' | 'brain' | 'events'>('stats')
-const showInputs = ref(true)
-const showOutputs = ref(true)
+const { getStatsPanel, setStatsPanel, getActionNoticing, setActionNoticing } = useUiPrefs()
+const statsPrefs = getStatsPanel()
+const activeTab = ref<'stats' | 'brain' | 'events'>(statsPrefs?.activeTab ?? 'stats')
+const showInputs = ref<boolean>(typeof statsPrefs?.showInputs === 'boolean' ? statsPrefs.showInputs : true)
+const showOutputs = ref<boolean>(
+  typeof statsPrefs?.showOutputs === 'boolean' ? statsPrefs.showOutputs : true,
+)
 // Canvas rendering options
-const showConnections = ref(true)
+const showConnections = ref<boolean>(
+  typeof statsPrefs?.showConnections === 'boolean' ? statsPrefs.showConnections : true,
+)
 
 const store = useSimulationStore()
+
+// Action Noticing settings (global + per-action + timing/zoom)
+const actionPrefs = ref(
+  getActionNoticing?.() ?? {
+    enabled: true,
+    byAction: { eats_plant: true },
+    holdMs: 3000,
+    zoom: 2,
+  },
+)
+// Persist on change
+watch(
+  actionPrefs,
+  (v) => {
+    setActionNoticing?.({
+      enabled: !!v.enabled,
+      byAction: { ...(v.byAction || {}), eats_plant: !!(v.byAction?.eats_plant ?? true) },
+      holdMs: Math.max(100, Number(v.holdMs) || 3000),
+      zoom: Math.max(0.2, Number(v.zoom) || 2),
+    })
+  },
+  { deep: true },
+)
 
 // Pretty-print labels for UI: snake_case -> Title Case, handle common short tokens
 function prettyLabel(raw: string): string {
@@ -182,46 +212,54 @@ const EVENT_KEYS = [
 ] as const
 type EventKey = (typeof EVENT_KEYS)[number]
 
-const typeFilters = ref<Record<EventType, boolean>>({ feeling: true, event: true, action: true })
-const keyFilters = ref<Record<EventKey, boolean>>({
-  thirst: true,
-  hunger: true,
-  fatigue: true,
-  fear: true,
-  pain: true,
-  mating_urge: true,
-  restless: true,
-  finds_water: true,
-  loses_water: true,
-  finds_mate: true,
-  loses_mate: true,
-  finds_prey: true,
-  loses_prey: true,
-  finds_predator: true,
-  loses_predator: true,
-  finds_corpse: true,
-  loses_corpse: true,
-  finds_food_plant: true,
-  loses_food_plant: true,
-  energy_gain: true,
-  energy_loss: true,
-  stamina_gain: true,
-  stamina_loss: true,
-  health_gain: true,
-  health_loss: true,
-  birth: true,
-  death: true,
-  drinks: true,
-  sprints: true,
-  stops_sprinting: true,
-  rests: true,
-  eats_plant: true,
-  eats_corpse: true,
-  gets_hit: true,
-  attacks: true,
-})
+const typeFilters = ref<Record<EventType, boolean>>(
+  (statsPrefs?.typeFilters as Record<EventType, boolean>) ?? {
+    feeling: true,
+    event: true,
+    action: true,
+  },
+)
+const keyFilters = ref<Record<EventKey, boolean>>(
+  (statsPrefs?.keyFilters as Record<EventKey, boolean>) ?? {
+    thirst: true,
+    hunger: true,
+    fatigue: true,
+    fear: true,
+    pain: true,
+    mating_urge: true,
+    restless: true,
+    finds_water: true,
+    loses_water: true,
+    finds_mate: true,
+    loses_mate: true,
+    finds_prey: true,
+    loses_prey: true,
+    finds_predator: true,
+    loses_predator: true,
+    finds_corpse: true,
+    loses_corpse: true,
+    finds_food_plant: true,
+    loses_food_plant: true,
+    energy_gain: true,
+    energy_loss: true,
+    stamina_gain: true,
+    stamina_loss: true,
+    health_gain: true,
+    health_loss: true,
+    birth: true,
+    death: true,
+    drinks: true,
+    sprints: true,
+    stops_sprinting: true,
+    rests: true,
+    eats_plant: true,
+    eats_corpse: true,
+    gets_hit: true,
+    attacks: true,
+  },
+)
 
-const sortBy = ref<'time_desc' | 'time_asc' | 'type'>('time_desc')
+const sortBy = ref<'time_desc' | 'time_asc' | 'type'>(statsPrefs?.sortBy ?? 'time_desc')
 
 const rawEvents = computed(() => {
   const id = props.creature?.id as string | undefined
@@ -244,6 +282,23 @@ const filteredEvents = computed(() => {
 function setActiveTab(tab: 'stats' | 'brain' | 'events') {
   activeTab.value = tab
 }
+
+// Persist watchers
+watch(activeTab, (v) => setStatsPanel({ activeTab: v }))
+watch(showInputs, (v) => setStatsPanel({ showInputs: v }))
+watch(showOutputs, (v) => setStatsPanel({ showOutputs: v }))
+watch(showConnections, (v) => setStatsPanel({ showConnections: v }))
+watch(sortBy, (v) => setStatsPanel({ sortBy: v }))
+watch(
+  typeFilters,
+  (v) => setStatsPanel({ typeFilters: { ...v } as any }),
+  { deep: true },
+)
+watch(
+  keyFilters,
+  (v) => setStatsPanel({ keyFilters: { ...v } as any }),
+  { deep: true },
+)
 
 function selectAllKeys(v: boolean) {
   for (const k of EVENT_KEYS) keyFilters.value[k] = v
@@ -548,6 +603,46 @@ function computedOutputLabels(len: number): string[] {
       <h2 class="text-2xl font-bold mb-4 text-gray-800">
         {{ creature?.name || 'Creature' }} Stats
       </h2>
+
+      <!-- Action Noticing Settings -->
+      <div class="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+        <div class="flex items-center justify-between">
+          <div class="font-semibold text-gray-800">Action Noticing</div>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" v-model="actionPrefs.enabled" />
+            Enabled
+          </label>
+        </div>
+        <div class="mt-3 grid grid-cols-2 gap-3 items-center">
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" v-model="actionPrefs.byAction.eats_plant" :disabled="!actionPrefs.enabled" />
+            Eats plant
+          </label>
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-gray-600">Hold (ms)</span>
+            <input
+              class="input input-bordered input-xs w-24"
+              type="number"
+              min="100"
+              step="100"
+              v-model.number="actionPrefs.holdMs"
+              :disabled="!actionPrefs.enabled"
+            />
+          </div>
+          <div class="flex items-center gap-2 text-sm">
+            <span class="text-gray-600">Zoom</span>
+            <input
+              class="input input-bordered input-xs w-20"
+              type="number"
+              min="0.2"
+              max="5"
+              step="0.1"
+              v-model.number="actionPrefs.zoom"
+              :disabled="!actionPrefs.enabled"
+            />
+          </div>
+        </div>
+      </div>
 
       <div class="border-b border-gray-200">
         <nav class="-mb-px flex space-x-8" aria-label="Tabs">

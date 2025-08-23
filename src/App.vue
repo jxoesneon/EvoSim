@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, computed, watch, type Ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, watch, nextTick } from 'vue'
 import { Bars3Icon, XMarkIcon, PlayIcon, StopIcon, ArrowPathIcon } from '@heroicons/vue/24/outline'
 // @ts-ignore - SFC default export provided by Vue compiler
 import EcosystemRenderer from './components/EcosystemRenderer.vue'
@@ -19,7 +19,10 @@ import HallOfFame from './components/HallOfFame.vue'
 // @ts-ignore - SFC default export provided by Vue compiler
 import EventNotifications from './components/EventNotifications.vue'
 import { Switch, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
+import { useUiPrefs, allowUiPrefsSaves } from './composables/useUiPrefs'
 const simulationStore = useSimulationStore()
+// Persisted UI preferences
+const uiPrefs = useUiPrefs()
 // Live selection: keep only the selected id and derive the creature from the store list each render
 const selectedId = ref<string | undefined>(undefined)
 const selectedCreatureLive = computed<Record<string, any> | undefined>(() => {
@@ -95,27 +98,156 @@ const showDebugOverlay = computed<boolean>({
   set: (v: boolean) => simulationStore.setShowDebugOverlay?.(!!v),
 })
 
-// Console debug logging toggle
+// Console debug logging (persisted in UiPrefs)
 const debugLogging = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).debugLogging as boolean,
-  set: (v: boolean) => simulationStore.setDebugLogging?.(!!v),
+  get: () => !!uiPrefs.getLogging().enabled,
+  set: (v: boolean) => uiPrefs.setLogging({ enabled: !!v }),
 })
 
-// Notifications duration (ms)
-const notificationDurationMs = ref<number>(3000)
+// Logging type controls (persisted)
+const logTypeOptions = [
+  { key: 'action_notice', label: 'Action Notice' },
+  { key: 'camera', label: 'Camera' },
+  { key: 'renderer', label: 'Renderer' },
+  { key: 'input', label: 'Input' },
+  { key: 'world_to_screen', label: 'Coords' },
+  { key: 'vision', label: 'Vision' },
+  { key: 'ui_prefs', label: 'UI Prefs' },
+  { key: 'creature_event', label: 'Creature Events' },
+] as const
+const loggingTypes = ref<Record<string, boolean>>({
+  action_notice: true,
+  camera: true,
+  renderer: true,
+  input: true,
+  world_to_screen: true,
+  vision: false,
+  ui_prefs: false,
+  creature_event: false,
+  ...uiPrefs.getLogging().types,
+})
+function toggleLogType(k: string) {
+  loggingTypes.value[k] = !loggingTypes.value[k]
+  uiPrefs.setLogging({ types: { [k]: loggingTypes.value[k] } as any })
+}
 
-// JSONBin bindings
+// Debug-only logger for temporary VisionPrefs diagnostics
+function visionLog(...args: any[]) {
+  if (debugLogging.value) console.log(...args)
+}
+function visionWarn(...args: any[]) {
+  if (debugLogging.value) console.warn(...args)
+}
+
+// Notifications duration (ms) - persisted
+const notificationDurationMs = ref<number>(uiPrefs.getNotificationDurationMs())
+watch(
+  notificationDurationMs,
+  (v) => {
+    uiPrefs.setNotificationDurationMs(Number(v) || 3000)
+  },
+  { immediate: false },
+)
+
+// Action Noticing controls (persisted)
+const anEnabled = ref<boolean>(uiPrefs.getActionNoticing().enabled)
+const anHoldMs = ref<number>(uiPrefs.getActionNoticing().holdMs)
+const anZoom = ref<number>(uiPrefs.getActionNoticing().zoom)
+// Available action types and labels
+const actionOptions = [
+  { key: 'eats_plant', label: 'Eat' },
+  { key: 'drinks_water', label: 'Drink' },
+  { key: 'attacks', label: 'Attack' },
+  { key: 'mates', label: 'Mate' },
+  { key: 'born', label: 'Birth' },
+  { key: 'dies', label: 'Death' },
+] as const
+// Local reactive map of action toggles
+const anByAction = ref<Record<string, boolean>>({
+  eats_plant: true,
+  drinks_water: true,
+  attacks: true,
+  mates: true,
+  born: true,
+  dies: true,
+  ...(uiPrefs.getActionNoticing().byAction || {}),
+})
+function toggleAction(key: string) {
+  anByAction.value[key] = !anByAction.value[key]
+  applyActionNoticing()
+}
+function applyActionNoticing() {
+  try {
+    uiPrefs.setActionNoticing({
+      enabled: !!anEnabled.value,
+      byAction: { ...anByAction.value },
+      holdMs: Number(anHoldMs.value) || 5000,
+      zoom: Number(anZoom.value) || 2,
+    })
+  } catch (e) {
+    console.warn('[App] applyActionNoticing failed', e)
+  }
+}
+
+// Action Range Overlay controls (persisted)
+const aroSaved = uiPrefs.getActionRangeOverlay()
+const aroEnabled = ref<boolean>(!!aroSaved.enabled)
+const aroAlpha = ref<number>(Number.isFinite(aroSaved.alpha) ? Number(aroSaved.alpha) : 0.2)
+const aroThin = ref<boolean>(aroSaved.thin !== false)
+const aroByType = ref<Record<string, boolean>>({
+  eat: true,
+  drink: true,
+  attack: true,
+  mate: true,
+  ...(aroSaved.byType || {}),
+})
+const aroTypeOptions = [
+  { key: 'eat', label: 'Eat' },
+  { key: 'drink', label: 'Drink' },
+  { key: 'attack', label: 'Attack' },
+  { key: 'mate', label: 'Mate' },
+] as const
+function toggleAroType(k: string) {
+  aroByType.value[k] = !aroByType.value[k]
+  applyActionRangeOverlay()
+}
+function applyActionRangeOverlay() {
+  try {
+    uiPrefs.setActionRangeOverlay({
+      enabled: !!aroEnabled.value,
+      byType: { ...aroByType.value },
+      alpha: Math.max(0, Math.min(1, Number(aroAlpha.value) || 0)),
+      thin: !!aroThin.value,
+    })
+  } catch (e) {
+    console.warn('[App] applyActionRangeOverlay failed', e)
+  }
+}
+
+// (moved) Vision toggle persistence watcher is placed after vision control declarations
+
+// JSONBin bindings (also persisted to prefs)
 const jsonBinId = computed<string>({
   get: () => simulationStore.jsonBin.binId,
   set: (v: string) => (simulationStore.jsonBin.binId = v || ''),
 })
+watch(
+  jsonBinId,
+  (v) => {
+    uiPrefs.setJsonBinId(v || '')
+  },
+  { immediate: false },
+)
 const hasApiKey = computed<boolean>(() => !!simulationStore.jsonBin.apiKeyPresent)
 
-// FPS toggle
-const fpsOn = ref(false)
+// FPS toggle (persisted)
+const fpsOn = ref(uiPrefs.getFpsOn())
 function onToggleFPS() {
+  // Apply immediately
   if (fpsOn.value) enableFPSMeter()
   else disableFPSMeter()
+  // Persist
+  uiPrefs.setFpsOn(fpsOn.value)
 }
 
 // Compact indicator bindings
@@ -130,30 +262,72 @@ const autoCont = computed<boolean>({
   set: (v: boolean) => simulationStore.setAutoContinueGenerations?.(!!v),
 })
 
-// Vision controls (moved from ControlPanel)
+// Vision controls (now persisted via useUiPrefs here)
+const savedVision = uiPrefs.getVisionSettings()
 const showVisionCones = computed<boolean>({
   get: () => (simulationStore.simulationParams as any).showVisionCones as boolean,
-  set: (v: boolean) => simulationStore.setShowVisionCones?.(!!v),
+  set: (v: boolean) => {
+    // Use store setter (simulationParams is exposed as readonly)
+    simulationStore.setShowVisionCones?.(!!v)
+  },
 })
-const visionFovDeg = ref<number>((simulationStore.simulationParams as any).visionFovDeg ?? 90)
-const visionRange = ref<number>((simulationStore.simulationParams as any).visionRange ?? 80)
+const visionFovDeg = ref<number>(
+  (savedVision.fovDeg ?? (simulationStore.simulationParams as any).visionFovDeg) ?? 90,
+)
+const visionRange = ref<number>(
+  (savedVision.range ?? (simulationStore.simulationParams as any).visionRange) ?? 80,
+)
 function applyVisionParams() {
-  simulationStore.setVisionFovDeg?.(Number(visionFovDeg.value))
-  simulationStore.setVisionRange?.(Number(visionRange.value))
+  const f = Number(visionFovDeg.value)
+  const r = Number(visionRange.value)
+  simulationStore.setVisionFovDeg?.(f)
+  simulationStore.setVisionRange?.(r)
+  try {
+    uiPrefs.setVisionSettings({ fovDeg: f, range: r })
+    visionLog('[VisionPrefs][App] applyVisionParams saved', uiPrefs.getVisionSettings())
+  } catch (e) {
+    visionWarn('[VisionPrefs][App] applyVisionParams persist failed', e)
+  }
 }
 
-// Brain seed control (moved from ControlPanel)
-const brainSeed = ref<number>(3735928559)
+// Persist Vision toggle changes (must be after showVisionCones is declared)
+watch(
+  () => showVisionCones.value,
+  (v) => {
+    try {
+      uiPrefs.setVisionSettings({ show: !!v })
+      visionLog('[VisionPrefs][App] showVisionCones changed', {
+        show: !!v,
+        after: uiPrefs.getVisionSettings(),
+        ls: localStorage.getItem('evo:ui-prefs'),
+      })
+    } catch (e) {
+      visionWarn('[VisionPrefs][App] showVisionCones persist failed', e)
+    }
+  },
+  { immediate: false },
+)
+
+// Brain seed control (moved from ControlPanel) - persisted
+const brainSeed = ref<number>(uiPrefs.getBrainSeed())
 function applySeed() {
   simulationStore.setBrainSeed?.(Number(brainSeed.value) >>> 0)
+  uiPrefs.setBrainSeed(Number(brainSeed.value) >>> 0)
 }
 
-// Zegion activations (hidden/output)
+// Zegion activations (hidden/output) - persisted
 const activationNames = computed(() => simulationStore.activationNames as string[])
 const selHidden = ref<string>((simulationStore.zegionActivations as any).hidden)
 const selOutput = ref<string>((simulationStore.zegionActivations as any).output)
+// Override with saved prefs if present
+try {
+  const act = uiPrefs.getActivations()
+  if (act.hidden) selHidden.value = act.hidden
+  if (act.output) selOutput.value = act.output
+} catch {}
 function applyActivations() {
   simulationStore.setZegionActivations(selHidden.value as any, selOutput.value as any)
+  uiPrefs.setActivations(selHidden.value, selOutput.value)
 }
 
 // Local persistence (download/upload)
@@ -301,6 +475,53 @@ async function onLoadJSONBin() {
 
 onMounted(() => {
   simulationStore.initialize()
+  // Expose a test-only toggle to unmount/mount the renderer (automation only)
+  try {
+    if (typeof navigator !== 'undefined' && (navigator as any).webdriver) {
+      ;(window as any).__toggleRenderer = () => {
+        showRenderer.value = !showRenderer.value
+      }
+    }
+  } catch {}
+  // Hydrate Vision from persisted prefs FIRST, so early saves (e.g., FPS) don't overwrite it
+  try {
+    const v = uiPrefs.getVisionSettings()
+    // Apply via store setters (avoid mutating readonly proxies)
+    const show = !!(v.show ?? (simulationStore.simulationParams as any).showVisionCones ?? true)
+    const fov = Number(v.fovDeg ?? (simulationStore.simulationParams as any).visionFovDeg ?? 90)
+    const rng = Number(v.range ?? (simulationStore.simulationParams as any).visionRange ?? 80)
+    simulationStore.setShowVisionCones?.(show)
+    simulationStore.setVisionFovDeg?.(fov)
+    simulationStore.setVisionRange?.(rng)
+    // Sync UI inputs
+    visionFovDeg.value = (simulationStore.simulationParams as any).visionFovDeg
+    visionRange.value = (simulationStore.simulationParams as any).visionRange
+    visionLog('[VisionPrefs][App] onMounted hydration', {
+      v,
+      show: (simulationStore.simulationParams as any).showVisionCones,
+      fov: visionFovDeg.value,
+      range: visionRange.value,
+      ls: localStorage.getItem('evo:ui-prefs'),
+    })
+  } catch (e) {
+    visionWarn('[VisionPrefs][App] onMounted hydration failed', e)
+  }
+  // Apply persisted FPS toggle state
+  onToggleFPS()
+  // Apply persisted JSONBin id
+  try {
+    const savedBin = uiPrefs.getJsonBinId()
+    if (savedBin) simulationStore.jsonBin.binId = savedBin
+  } catch {}
+  // Apply persisted seed and activations into store
+  try {
+    simulationStore.setBrainSeed?.(Number(brainSeed.value) >>> 0)
+    simulationStore.setZegionActivations(selHidden.value as any, selOutput.value as any)
+  } catch {}
+  // Hydration complete: now allow UiPrefs to save deterministically
+  try {
+    allowUiPrefsSaves()
+  } catch {}
   // Auto-open Summary modal when visiting with ?uplot=1 (for layout/e2e testing)
   try {
     const usp = new URLSearchParams(window.location.search)
@@ -343,8 +564,13 @@ watch(
 // Left (Stats) drawer state
 const showStatsDrawer = ref(false)
 
-// Telemetry overlay toggle (navbar)
-const showTelemetryOverlay = ref(false)
+// Telemetry overlay toggle (navbar) - persisted in UiPrefs
+const showTelemetryOverlay = computed<boolean>({
+  get: () => uiPrefs.getTelemetryOverlayOn(),
+  set: (v: boolean) => uiPrefs.setTelemetryOverlayOn(!!v),
+})
+// Test hook: allow mounting/unmounting renderer to validate RAF/WebGL lifecycle
+const showRenderer = ref(true)
 </script>
 
 <template>
@@ -408,7 +634,12 @@ const showTelemetryOverlay = ref(false)
           </div>
           <div class="ml-2 hidden md:flex items-center gap-1">
             <span class="text-xs opacity-80">Vision</span>
-            <input type="checkbox" class="toggle toggle-xs" v-model="showVisionCones" />
+            <input
+              type="checkbox"
+              class="toggle toggle-xs"
+              v-model="showVisionCones"
+              data-testid="navbar-vision-toggle"
+            />
           </div>
         </div>
         <div class="navbar-end">
@@ -421,7 +652,7 @@ const showTelemetryOverlay = ref(false)
 
       <!-- Main Content -->
       <main class="flex-grow relative">
-        <EcosystemRenderer
+        <EcosystemRenderer v-if="showRenderer"
           :show-telemetry="showTelemetryOverlay"
           @creature-selected="onCreatureSelected"
         />
@@ -585,7 +816,12 @@ const showTelemetryOverlay = ref(false)
               <div class="divider my-3">Vision</div>
               <label class="label cursor-pointer">
                 <span class="label-text">Show Vision Cones</span>
-                <input type="checkbox" class="toggle" v-model="showVisionCones" />
+                <input
+                  type="checkbox"
+                  class="toggle"
+                  v-model="showVisionCones"
+                  data-testid="settings-vision-toggle"
+                />
               </label>
               <div class="grid grid-cols-2 gap-2">
                 <label class="label">
@@ -595,6 +831,7 @@ const showTelemetryOverlay = ref(false)
                   type="number"
                   class="input input-sm input-bordered"
                   v-model.number="visionFovDeg"
+                  data-testid="settings-vision-fov"
                 />
                 <label class="label">
                   <span class="label-text">Range</span>
@@ -603,9 +840,82 @@ const showTelemetryOverlay = ref(false)
                   type="number"
                   class="input input-sm input-bordered"
                   v-model.number="visionRange"
+                  data-testid="settings-vision-range"
                 />
               </div>
               <button class="btn btn-sm" @click="applyVisionParams">Apply Vision</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Range Overlay Section -->
+        <div class="collapse collapse-arrow bg-base-100 mb-3">
+          <input type="checkbox" />
+          <div class="collapse-title text-lg font-semibold px-4 py-3">Action Range Overlay</div>
+          <div class="collapse-content px-4 pb-4 pt-0">
+            <div class="form-control space-y-3">
+              <label class="label cursor-pointer" title="Enable/disable action range overlay">
+                <span class="label-text">Enabled</span>
+                <input type="checkbox" class="toggle toggle-primary" v-model="aroEnabled" @change="applyActionRangeOverlay" />
+              </label>
+              <div>
+                <div class="label pb-1"><span class="label-text">Action Types</span></div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="opt in aroTypeOptions"
+                    :key="opt.key"
+                    type="button"
+                    :class="['btn btn-xs', aroByType[opt.key] ? 'btn-primary' : 'btn-outline']"
+                    @click="toggleAroType(opt.key)"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
+              <div class="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label class="label"><span class="label-text">Alpha</span></label>
+                <input type="range" min="0" max="1" step="0.05" class="range range-sm w-[160px] justify-self-end" v-model.number="aroAlpha" @change="applyActionRangeOverlay" />
+              </div>
+              <label class="label cursor-pointer" title="Use thinner stroke for rings">
+                <span class="label-text">Thin Stroke</span>
+                <input type="checkbox" class="toggle toggle-secondary" v-model="aroThin" @change="applyActionRangeOverlay" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Noticing Section -->
+        <div class="collapse collapse-arrow bg-base-100 mb-3">
+          <input type="checkbox" />
+          <div class="collapse-title text-lg font-semibold px-4 py-3">Action Noticing</div>
+          <div class="collapse-content px-4 pb-4 pt-0">
+            <div class="form-control space-y-3">
+              <label class="label cursor-pointer" title="Enable/disable action noticing">
+                <span class="label-text">Enabled</span>
+                <input type="checkbox" class="toggle toggle-primary" v-model="anEnabled" @change="applyActionNoticing" />
+              </label>
+              <div>
+                <div class="label pb-1"><span class="label-text">Actions</span></div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="opt in actionOptions"
+                    :key="opt.key"
+                    type="button"
+                    :class="['btn btn-xs', anByAction[opt.key] ? 'btn-primary' : 'btn-outline']"
+                    @click="toggleAction(opt.key)"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
+              <div class="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label class="label"><span class="label-text">Hold (ms)</span></label>
+                <input type="number" min="250" step="250" class="input input-sm input-bordered w-[120px] justify-self-end" v-model.number="anHoldMs" @change="applyActionNoticing" />
+              </div>
+              <div class="grid grid-cols-[1fr_auto] items-center gap-2">
+                <label class="label"><span class="label-text">Zoom</span></label>
+                <input type="number" min="0.2" max="10" step="0.1" class="input input-sm input-bordered w-[120px] justify-self-end" v-model.number="anZoom" @change="applyActionNoticing" />
+              </div>
             </div>
           </div>
         </div>
@@ -627,6 +937,20 @@ const showTelemetryOverlay = ref(false)
                 <span class="label-text">Enable Console Debug Logs</span>
                 <input type="checkbox" class="toggle toggle-secondary" v-model="debugLogging" />
               </label>
+              <div>
+                <div class="label pb-1"><span class="label-text">Categories</span></div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="opt in logTypeOptions"
+                    :key="opt.key"
+                    type="button"
+                    :class="['btn btn-xs', loggingTypes[opt.key] ? 'btn-secondary' : 'btn-outline']"
+                    @click="toggleLogType(opt.key)"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
               <div>
                 <button
                   class="btn btn-sm btn-outline"
