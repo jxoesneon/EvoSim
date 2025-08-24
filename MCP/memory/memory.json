@@ -1,0 +1,258 @@
+{"type":"entity","entityType":"project","name":"EvoSim","observations":["Monorepo-like web app with 122 directories and 536 files","Tech stack: Vue 3 + Vite + TypeScript + Tailwind CSS","Testing: Vitest (unit) + Playwright (e2e)","Contains Rust/WASM artifacts under src/wasm/pkg (ecosim.wasm)","Repository includes `MCP/memory/memory.json` for knowledge persistence","Total count from tree: 122 directories, 536 files"]}
+{"type":"entity","entityType":"component","name":"src","observations":["Primary application source code","Contains components, composables, router, WebGL, Zegion, tests","Detected WASM artifact directory: `src/wasm/pkg/` with `ecosim.wasm` and Rust crate deps"]}
+{"type":"entity","entityType":"component","name":"src/components","observations":["Vue SFC UI components including overlays and panels"]}
+{"type":"entity","entityType":"component","name":"src/composables","observations":["Reusable Vue composition API hooks (state, services, prefs)"]}
+{"type":"entity","entityType":"component","name":"src/router","observations":["Vue Router configuration in index.ts"]}
+{"type":"entity","entityType":"component","name":"src/webgl","observations":["WebGL renderer logic in renderer.ts","Likely responsible for rendering simulation state via WebGL pipeline"]}
+{"type":"entity","entityType":"component","name":"src/zegion","observations":["Domain logic modules (activations, modulators, plasticity, structure, utils) with types and specs","Provides neural network/evolution domain types and logic consumed by UI/renderer"]}
+{"type":"entity","entityType":"component","name":"src/__tests__","observations":["Vitest unit tests defining expected behaviors"]}
+{"type":"entity","entityType":"component","name":"e2e","observations":["Playwright tests for app flows and layout"]}
+{"type":"entity","entityType":"component","name":"public","observations":["Static assets and JSON data (bad-brains.json, favicon)","`bad-brains.json` likely sample or baseline dataset for simulations"]}
+{"type":"entity","entityType":"component","name":"scripts","observations":["Node scripts for data generation and merging JSON brains","`merge-bad-brains.mjs` merges JSON inputs under scripts/ and public/","`brain-smoke.mjs` performs smoke tests or data generation for brains"]}
+{"type":"entity","entityType":"component","name":"build-config","observations":["Vite, Tailwind, ESLint, Vitest, Playwright, TS configs"]}
+{"type":"entity","entityType":"dependency","name":"vue","observations":["Frontend framework (Vue 3)"]}
+{"type":"entity","entityType":"dependency","name":"vite","observations":["Build tool and dev server"]}
+{"type":"entity","entityType":"dependency","name":"tailwindcss","observations":["Utility-first CSS framework"]}
+{"type":"entity","entityType":"dependency","name":"typescript","observations":["Type system for TS files"]}
+{"type":"entity","entityType":"dependency","name":"vitest","observations":["Unit test runner"]}
+{"type":"entity","entityType":"dependency","name":"playwright","observations":["End-to-end testing framework"]}
+{"type":"entity","entityType":"dependency","name":"wasm-ecosim","observations":["Rust/WASM module output ecosim.wasm used by app"]}
+{"type":"entity","entityType":"component","name":"vite-config","observations":["`vite.config.ts` defines custom dev middleware '/api/bad-brains' that reads/writes 'public/bad-brains.json'","Includes Vue, Vue JSX, and Vue DevTools plugins","Sets alias '@' -> './src' and assetsInclude for '*.wasm'"]}
+{"type":"entity","entityType":"component","name":"wasm-ecosim-crate","observations":["Rust crate at 'src/wasm/ecosim' builds to 'ecosim.wasm'","Cargo.toml and src/lib.rs present; target/debug contains wasm and deps"]}
+{"type":"entity","entityType":"component","name":"styles","observations":["Tailwind entry at 'src/styles/tailwind.css'","Tailwind config v4 with content glob includes .vue, .ts, .tsx, .js, .jsx"]}
+{"type":"entity","entityType":"component","name":"types","observations":["Type declarations at 'src/types/wasm-ecosim.d.ts'"]}
+{"type":"entity","entityType":"component","name":"docs","observations":["Project docs and domain notes: Cost.md, GenerationSummaryConcepts.md, terrain.md, time.md, weather.md"]}
+{"type":"entity","entityType":"component","name":"mcp-memory","observations":["MCP/memory/memory.json exists for persisted knowledge graph"]}
+{"type":"entity","entityType":"component","name":"root-config","observations":["package.json, tsconfig*.json, eslint.config.ts, vitest.config.ts, playwright.config.ts, tailwind.config.js, index.html"]}
+{"type":"entity","entityType":"module","name":"components","observations":["Vue single-file components for UI","Includes panels, overlays, and summary dashboard","Subdir: components/summary with charts"]}
+{"type":"entity","entityType":"module","name":"composables","observations":["Vue Composition API utilities managing state and prefs","Includes useSimulationStore.ts, useUiPrefs.ts, useUserPrefs.ts, useNameService.ts"]}
+{"type":"entity","entityType":"module","name":"router","observations":["Vue Router setup at src/router/index.ts"]}
+{"type":"entity","entityType":"module","name":"webgl","observations":["Three.js renderer logic at src/webgl/renderer.ts"]}
+{"type":"entity","entityType":"module","name":"zegion","observations":["Domain logic modules for neural/evolution systems","Submodules: activations, evolution, io, modulators, plasticity, structure, utils"]}
+{"type":"entity","entityType":"test_suite","name":"unit-tests","observations":["Vitest unit tests under src/__tests__/"]}
+{"type":"entity","entityType":"test_suite","name":"e2e-tests","observations":["Playwright e2e tests under e2e/"]}
+{"type":"entity","entityType":"directory","name":"public-assets","observations":["Static assets under public/ e.g., bad-brains.json, favicon.ico"]}
+{"type":"entity","entityType":"file","name":"src/main.ts","observations":["Vue app bootstrap: imports styles, App.vue, router and mounts to #app"]}
+{"type":"entity","entityType":"file","name":"src/App.vue","observations":["Root Vue component for EvoSim UI"]}
+{"type":"entity","entityType":"file","name":"src/router/index.ts","observations":["Defines Vue Router instance and routes"]}
+{"type":"entity","entityType":"file","name":"src/webgl/renderer.ts","observations":["Three.js-based renderer managing scene and instanced meshes"]}
+{"type":"entity","entityType":"file","name":"src/components/EcosystemRenderer.vue","observations":["Renders WebGL canvas and input handling","Imports initWebGL/renderScene/disposeWebGL from src/webgl/renderer.ts","Consumes useSimulationStore and useUiPrefs","Emits 'creature-selected'"]}
+{"type":"entity","entityType":"file","name":"src/composables/useUiPrefs.ts","observations":["LocalStorage-backed reactive UI prefs (logging, overlays, action noticing, stats panel, vision, action ranges)","Exports allowUiPrefsSaves gate to delay saves until hydration is complete"]}
+{"type":"entity","entityType":"file","name":"src/composables/useUserPrefs.ts","observations":["LocalStorage-backed user prefs for export formats","Simple API: get/set last and preferred export type per key"]}
+{"type":"entity","entityType":"file","name":"src/composables/useNameService.ts","observations":["Name service that prefetches names from randomuser.me","Provides stable id->name mapping with fallbacks"]}
+{"type":"entity","entityType":"file","name":"src/types/wasm-ecosim.d.ts","observations":["Declares module '@/wasm/ecosim/pkg/ecosim'","Exports WasmConfig shape (time, thresholds, env costs, corpse decay)","Exports World class with step(), creatures_json(), plants_json(), corpses_json(), set_config(), set_brain_mode(), optional helpers spawn_* and telemetry getters"]}
+{"type":"entity","entityType":"file","name":"src/composables/useSimulationStore.ts","observations":["Dynamically imports WASM: import('@/wasm/ecosim/pkg/ecosim') and wasm binary url import","Constructs wasmWorld = new World(2000,2000,seed)","Bridges config via set_config(buildWasmConfig()) and brain mode via set_brain_mode()","Reads simulation state via creatures_json()/plants_json()/corpses_json()","Optionally calls env_costs_json() and corpse_costs_json()","Spawns entities via spawn_creature()/spawn_plant() when present","Maintains JS fallback when wasmWorld is null","Consumes Zegion modules: getZegionSpec, RNG, ActivationRegistry","Dynamically imports '@/wasm/ecosim/pkg/ecosim' and '@/wasm/ecosim/pkg/ecosim_bg.wasm?url'","Initializes WASM module then constructs World instance and stores as wasmWorld","On init, calls wasmWorld.set_brain_mode(simulationParams.brainMode) and wasmWorld.set_config(buildWasmConfig()) if available","Watches simulation params and calls wasmWorld.set_config(buildWasmConfig()) on changes","During step loop, calls wasmWorld.step(dt), then reads wasmWorld.creatures_json(), wasmWorld.plants_json(), and optionally wasmWorld.corpses_json(), env_costs_json(), corpse_costs_json()","Supports spawning via wasmWorld.spawn_creature(x,y) and wasmWorld.spawn_plant(x,y,r) with JS fallbacks","Syncs bad brain hashes to WASM via wasmWorld.set_bad_brain_hashes([...]) when available"]}
+{"type":"entity","entityType":"file","name":"src/wasm/ecosim/src/lib.rs","observations":["Rust wasm-bindgen world implementation","Defines Config, World, Creature/Plant/Corpse, Brain types","World::new(), step(), env sampling and energy/health costs","Parity with JS via telemetry fields and thresholds","Enums Diet, BrainMode"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/","observations":["Domain neural modules for Zegion brain architecture"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/activations/","observations":["ActivationRegistry and tests for activations"]}
+{"type":"entity","entityType":"file","name":"src/zegion/activations/index.ts","observations":["Exports ActivationRegistry and ActivationName"]}
+{"type":"entity","entityType":"file","name":"src/zegion/activations/activations.spec.ts","observations":["Unit tests for activation functions"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/io/","observations":["I/O specs for Zegion brain"]}
+{"type":"entity","entityType":"file","name":"src/zegion/io/spec.ts","observations":["Exports getZegionSpec used by store"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/utils/","observations":["Utility functions (seeding) for deterministic RNG"]}
+{"type":"entity","entityType":"file","name":"src/zegion/utils/seeding.ts","observations":["Exports RNG used for brain seeding"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/plasticity/","observations":["Plasticity mechanisms (Hebbian neuromod)"]}
+{"type":"entity","entityType":"file","name":"src/zegion/plasticity/neuromod_hebbian.ts","observations":["Implements neuromodulatory Hebbian update"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/structure/","observations":["Type definitions for network structure"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/modulators/","observations":["Type definitions for modulators"]}
+{"type":"entity","entityType":"directory","name":"src/zegion/evolution/","observations":["Evolutionary types"]}
+{"type":"entity","entityType":"file","name":"src/zegion/structure/types.ts","observations":["Defines StructureAPI with add/prune synapses, add neurons, swap activation","Types: AddSynapseOp, PruneCriteria, AddNeuronOp"]}
+{"type":"entity","entityType":"file","name":"src/zegion/modulators/types.ts","observations":["Defines ComputeModulators(prev,curr) => ModulatorSignal","Types: ModulatorSignal, SimSnapshotMinimal"]}
+{"type":"entity","entityType":"file","name":"src/zegion/plasticity/types.ts","observations":["Defines PlasticityRule with initTraces() and update()","Types: Synapse, EligibilityTrace, PlasticityParams, UpdateContext"]}
+{"type":"entity","entityType":"file","name":"src/zegion/evolution/types.ts","observations":["Defines Genome, MutationParams, Mutate, Crossover"]}
+{"type":"entity","entityType":"file","name":"src/components/ControlPanel.vue","observations":["Emits: 'start','stop','reset','add-creature','add-plant','save','load'","Uses useSimulationStore to set params: vision cones, thresholds, debug overlay, brain seed, auto-continue","Uses useUiPrefs for logging and action noticing preferences","Triggers download and file upload for save/load snapshots"]}
+{"type":"entity","entityType":"file","name":"src/components/StatsPanel.vue","observations":["Props: creature?: Record<string,any)","Emits: 'close'","Uses useSimulationStore for events and input metadata","Uses useUiPrefs for stats panel and action noticing persistence","Renders brain canvas visualization and inputs/outputs with hover tooltips","Filters and sorts creature events"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/SummaryDashboard.vue","observations":["Async-composes summary sections and routes 'edit' from EnvironmentSummary to scroll to controls panel"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/EnvironmentSummary.vue","observations":["Emits 'edit' with keys 'plantSpawnRate' | 'waterLevel'","Uses useSimulationStore telemetry series and useUserPrefs for export prefs","Provides CSV/PNG exports via EChart child refs"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/HeaderKpis.vue","observations":["Displays KPIs from useSimulationStore (generation, avg speed, populations, world time, duration, stagnation)","No emits; copy-to-clipboard helpers for values"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/ControlsPanel.vue","observations":["Binds sliders to simulation params via useSimulationStore setters (mutationRate, mutationAmount, movementThreshold, stagnantTicksLimit, plantSpawnRate, waterLevel)","Defines presets and applyPreset() to set multiple params","Provides Start Next Generation via store.startSimulation()","No custom emits; identified element id 'controls-panel' used for scrolling focus"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/ExportsBar.vue","observations":["Provides export actions for the full summary view: PNG, SVG (via html-to-image), JSON, CSV","Uses useSimulationStore to read generation, telemetry, lastGenEnd for filenames and payloads","Copy settings button writes a JSON snapshot to clipboard"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/PopulationDynamics.vue","observations":["Uses useSimulationStore telemetry population series; builds processed series with smoothing and windowing; persists UI prefs via useUiPrefs","Exports PNG/CSV; remembers preferred export via useUserPrefs","Async-loads UPlotStackedArea chart component"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/MovementActivity.vue","observations":["Displays movement timeline and histogram from telemetry.avgSpeed with optional threshold; exports PNG/CSV; persists UI prefs"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/HallOfFameList.vue","observations":["Emits: 'focus'(id), 'stats'(entry), 'details'(entry)","Uses useSimulationStore.getHallOfFameTop(10), creatures list, setSelectedCreature(), centerCameraOn() if available","Stable avatar colors from live creature communicationColor or hashed id"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/GeneticsBrains.vue","observations":["Builds histograms for phenotype eyesCount, sightRange, fieldOfViewDeg","Exports PNG/CSV with per-chart preferred formats via useUserPrefs","Async-loads EChart; uses store.creatures as data source","No emits"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/BehaviorEvents.vue","observations":["Uses telemetry.totals and telemetry.series.events cumulative arrays; diffs into per-interval rates","Exports PNG/CSV with preferred formats via useUserPrefs","Async-loads EChart; no emits"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/SpatialEnvironment.vue","observations":["Generates heatmap centered on camera using store.sampleTerrain over a grid; overlays nearby creatures scatter","PNG export via EChart ref; no emits"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/ComparisonsTrends.vue","observations":["Builds four sparklines (avg speed, population, births/step, deaths/step) from telemetry series","Smoothing toggle/window selection; exports PNG and CSV per spark; no emits"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/charts/EChart.vue","observations":["Thin wrapper around ECharts with lazy import, autoresize via ResizeObserver, methods: getInstance(), getDataURL(), downloadPNG()"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/charts/UPlotLine.vue","observations":["Thin uPlot line wrapper; lazy import; resize observer; recreates on options changes; setData on data change"]}
+{"type":"entity","entityType":"file","name":"src/components/summary/charts/UPlotStackedArea.vue","observations":["uPlot stacked-area wrapper; builds cumulative series; fixed-height sizing; resize observer; recreates when series count changes"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/README.md","observations":["Overview of Zegion modules and supported activations; notes phased rollout"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/plasticity/README.md","observations":["Plasticity roadmap: eligibility traces, neuromod Hebbian, clipping, budgets"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/modulators/README.md","observations":["Modulator signals planned: energy/health deltas, reproduction, proximity; normalized to [-1,1]"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/structure/README.md","observations":["Structural plasticity roadmap: pruning, add/merge neurons, activation swapping"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/utils/README.md","observations":["Utils roadmap incl. RNG shared with WASM, vector ops"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/evolution/README.md","observations":["Evolution roadmap: mutation/crossover: weight noise, synapse add/prune, neuron add/split, subgraph crossover"]}
+{"type":"entity","entityType":"doc","name":"src/zegion/io/README.md","observations":["IO roadmap: load spec json, runtime overrides, future import/export of trained brains"]}
+{"type":"entity","entityType":"doc","name":"docs/ARCHITECTURE.md","observations":["Architecture overview for WASM + Zegion + UI/data flow","Includes mermaid diagram and key import points; maintenance notes and telemetry surfaces"]}
+{"type":"entity","entityType":"doc","name":"docs/TELEMETRY.md","observations":["Defines telemetry.series and totals structure, cadence, retention, and consumer components","Documents MAX_SERIES ring buffer and diffing cumulative events to rates","2025-08-23: Added blank line before Notes list (MD032)."]}
+{"type":"entity","entityType":"doc","name":"docs/COMPONENTS.md","observations":["Component reference for core, summary, and chart wrappers with props/emits and store usage","2025-08-23: Ensured blank lines after headings and around lists (MD022/MD032); added usage snippets."]}
+{"type":"entity","entityType":"doc","name":"docs/CONTRIBUTING.md","observations":["Checklist for adding new simulation params and wiring through Store/WASM/UI/Telemetry/Renderer"]}
+{"type":"entity","entityType":"doc","name":"docs/TROUBLESHOOTING.md","observations":["Runtime issues FAQ covering WASM init, HMR disposal, FPS, clipboard/downloads, JSON save/load, telemetry NaN/zeros, context loss, spawn consistency, overlay alignment","2025-08-23: Fixed MD032 blanks-around-lists by inserting spacing after labels."]}
+{"type":"entity","entityType":"doc","name":"docs/README.md","observations":["Docs index linking Architecture, Telemetry, Components, Contributing"]}
+{"type":"entity","entityType":"component","name":"src/components/summary/","observations":["Summary dashboard charts consume telemetry"]}
+{"type":"entity","entityType":"document","name":"docs/DESIGN_DECISIONS.md","observations":["Instanced rendering rationale/trade-offs","Telemetry ring buffers design","Cumulative event diffing choice","WASM config propagation via store","Store as orchestrator; testing/observability notes","References to code and other docs"]}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"src"}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"e2e"}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"public"}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"scripts"}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"build-config"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/components"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/composables"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/router"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/webgl"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/zegion"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/__tests__"}
+{"type":"relation","from":"EvoSim","relationType":"uses","to":"vue"}
+{"type":"relation","from":"EvoSim","relationType":"uses","to":"vite"}
+{"type":"relation","from":"EvoSim","relationType":"uses","to":"tailwindcss"}
+{"type":"relation","from":"EvoSim","relationType":"uses","to":"typescript"}
+{"type":"relation","from":"EvoSim","relationType":"uses","to":"vitest"}
+{"type":"relation","from":"EvoSim","relationType":"uses","to":"playwright"}
+{"type":"relation","from":"src","relationType":"uses","to":"wasm-ecosim"}
+{"type":"relation","from":"e2e","relationType":"uses","to":"playwright"}
+{"type":"relation","from":"src/__tests__","relationType":"uses","to":"vitest"}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"public-assets"}
+{"type":"relation","from":"src","relationType":"contains","to":"components"}
+{"type":"relation","from":"src","relationType":"contains","to":"composables"}
+{"type":"relation","from":"src","relationType":"contains","to":"router"}
+{"type":"relation","from":"src","relationType":"contains","to":"webgl"}
+{"type":"relation","from":"src","relationType":"contains","to":"wasm-ecosim"}
+{"type":"relation","from":"src","relationType":"contains","to":"zegion"}
+{"type":"relation","from":"src","relationType":"contains","to":"unit-tests"}
+{"type":"relation","from":"EvoSim","relationType":"contains","to":"e2e-tests"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/main.ts"}
+{"type":"relation","from":"src","relationType":"contains","to":"src/App.vue"}
+{"type":"relation","from":"router","relationType":"contains","to":"src/router/index.ts"}
+{"type":"relation","from":"webgl","relationType":"contains","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"components","relationType":"contains","to":"src/components/EcosystemRenderer.vue"}
+{"type":"relation","from":"composables","relationType":"contains","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"composables","relationType":"contains","to":"src/composables/useUserPrefs.ts"}
+{"type":"relation","from":"composables","relationType":"contains","to":"src/composables/useNameService.ts"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"useSimulationStore"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/webgl/renderer.ts","relationType":"uses","to":"useSimulationStore"}
+{"type":"relation","from":"src/webgl/renderer.ts","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/App.vue","relationType":"uses","to":"src/components/EcosystemRenderer.vue"}
+{"type":"relation","from":"src/App.vue","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/App.vue","relationType":"uses","to":"useSimulationStore"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"imports","to":"@/wasm/ecosim/pkg/ecosim"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"constructs","to":"World"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses","to":"World.set_config"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses","to":"World.set_brain_mode"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"reads_state_from","to":"World.creatures_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"reads_state_from","to":"World.plants_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"reads_state_from","to":"World.corpses_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses_optional","to":"World.env_costs_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses_optional","to":"World.corpse_costs_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses_optional","to":"World.spawn_creature"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses_optional","to":"World.spawn_plant"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses","to":"@/zegion/io/spec"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses","to":"@/zegion/utils/seeding"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"uses","to":"@/zegion/activations"}
+{"type":"relation","from":"src/webgl/renderer.ts","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/App.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/App.vue","relationType":"uses","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"src/zegion/activations/","relationType":"contains","to":"src/zegion/activations/index.ts"}
+{"type":"relation","from":"src/zegion/activations/","relationType":"contains","to":"src/zegion/activations/activations.spec.ts"}
+{"type":"relation","from":"src/zegion/io/","relationType":"contains","to":"src/zegion/io/spec.ts"}
+{"type":"relation","from":"src/zegion/utils/","relationType":"contains","to":"src/zegion/utils/seeding.ts"}
+{"type":"relation","from":"src/zegion/plasticity/","relationType":"contains","to":"src/zegion/plasticity/neuromod_hebbian.ts"}
+{"type":"relation","from":"src/types/wasm-ecosim.d.ts","relationType":"declares_module","to":"@/wasm/ecosim/pkg/ecosim"}
+{"type":"relation","from":"src/types/wasm-ecosim.d.ts","relationType":"declares_type","to":"World"}
+{"type":"relation","from":"src/types/wasm-ecosim.d.ts","relationType":"declares_type","to":"WasmConfig"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"imports","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"initWebGL"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"renderScene"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"disposeWebGL"}
+{"type":"relation","from":"src/components/EcosystemRenderer.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/ControlPanel.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/ControlPanel.vue","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/components/StatsPanel.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/StatsPanel.vue","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/HeaderKpis.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/PopulationDynamics.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/MovementActivity.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/HallOfFameList.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/EnvironmentSummary.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/ComparisonsTrends.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/GeneticsBrains.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/BehaviorEvents.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/SpatialEnvironment.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/InsightsRecommendations.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/ControlsPanel.vue"}
+{"type":"relation","from":"src/components/summary/SummaryDashboard.vue","relationType":"contains","to":"src/components/summary/ExportsBar.vue"}
+{"type":"relation","from":"src/components/summary/EnvironmentSummary.vue","relationType":"emits","to":"edit"}
+{"type":"relation","from":"src/components/summary/EnvironmentSummary.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/HeaderKpis.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/HallOfFameList.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/GeneticsBrains.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/GeneticsBrains.vue","relationType":"uses","to":"src/composables/useUserPrefs.ts"}
+{"type":"relation","from":"src/components/summary/BehaviorEvents.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/BehaviorEvents.vue","relationType":"uses","to":"src/composables/useUserPrefs.ts"}
+{"type":"relation","from":"src/components/summary/SpatialEnvironment.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/ComparisonsTrends.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/InsightsRecommendations.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/PopulationDynamics.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/PopulationDynamics.vue","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/components/summary/MovementActivity.vue","relationType":"uses","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"src/components/summary/MovementActivity.vue","relationType":"uses","to":"src/composables/useUiPrefs.ts"}
+{"type":"relation","from":"src/components/summary/GeneticsBrains.vue","relationType":"imports","to":"src/components/summary/charts/EChart.vue"}
+{"type":"relation","from":"src/components/summary/BehaviorEvents.vue","relationType":"imports","to":"src/components/summary/charts/EChart.vue"}
+{"type":"relation","from":"src/components/summary/SpatialEnvironment.vue","relationType":"imports","to":"src/components/summary/charts/EChart.vue"}
+{"type":"relation","from":"src/components/summary/ComparisonsTrends.vue","relationType":"imports","to":"src/components/summary/charts/EChart.vue"}
+{"type":"relation","from":"src/components/summary/MovementActivity.vue","relationType":"imports","to":"src/components/summary/charts/UPlotLine.vue"}
+{"type":"relation","from":"src/components/summary/MovementActivity.vue","relationType":"imports","to":"src/components/summary/charts/EChart.vue"}
+{"type":"relation","from":"src/components/summary/PopulationDynamics.vue","relationType":"imports","to":"src/components/summary/charts/UPlotStackedArea.vue"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"imports","to":"src/zegion/io/spec.ts"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"imports","to":"src/zegion/utils/seeding.ts"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"imports","to":"src/zegion/activations/index.ts"}
+{"type":"relation","from":"src/zegion/plasticity/neuromod_hebbian.ts","relationType":"implements","to":"src/zegion/plasticity/types.ts"}
+{"type":"relation","from":"src/zegion/modulators/types.ts","relationType":"defines","to":"ComputeModulators"}
+{"type":"relation","from":"src/zegion/evolution/types.ts","relationType":"defines","to":"Genome"}
+{"type":"relation","from":"src/zegion/activations/index.ts","relationType":"exports","to":"ActivationRegistry"}
+{"type":"relation","from":"src/App.vue","relationType":"imports","to":"src/components/EcosystemRenderer.vue"}
+{"type":"relation","from":"src/App.vue","relationType":"imports","to":"src/components/summary/SummaryDashboard.vue"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.set_config"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.set_brain_mode"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.creatures_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.plants_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.corpses_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.env_costs_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.corpse_costs_json"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.spawn_creature"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.spawn_plant"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"calls","to":"wasmWorld.set_bad_brain_hashes"}
+{"type":"relation","from":"src/composables/useSimulationStore.ts","relationType":"imports","to":"src/types/wasm-ecosim.d.ts"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/components/EcosystemRenderer.vue"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/App.vue"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/components/ControlPanel.vue"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/zegion/activations/index.ts"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/zegion/plasticity/neuromod_hebbian.ts"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"src/zegion/io/spec.ts"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"src/components/summary/PopulationDynamics.vue"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"src/components/summary/MovementActivity.vue"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"src/components/summary/BehaviorEvents.vue"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"src/components/summary/ComparisonsTrends.vue"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"src/components/summary/HeaderKpis.vue"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"documents","to":"EvoSim"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"documents","to":"EvoSim"}
+{"type":"relation","from":"docs/COMPONENTS.md","relationType":"documents","to":"EvoSim"}
+{"type":"relation","from":"docs/CONTRIBUTING.md","relationType":"documents","to":"EvoSim"}
+{"type":"relation","from":"docs/TROUBLESHOOTING.md","relationType":"documents","to":"EvoSim"}
+{"type":"relation","from":"docs/README.md","relationType":"indexes","to":"EvoSim"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"references","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"docs/ARCHITECTURE.md","relationType":"references","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"docs/COMPONENTS.md","relationType":"references","to":"src/components/summary/"}
+{"type":"relation","from":"docs/TELEMETRY.md","relationType":"references","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"docs/TROUBLESHOOTING.md","relationType":"references","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"docs/DESIGN_DECISIONS.md","relationType":"documents","to":"EvoSim"}
+{"type":"relation","from":"docs/DESIGN_DECISIONS.md","relationType":"references","to":"src/webgl/renderer.ts"}
+{"type":"relation","from":"docs/DESIGN_DECISIONS.md","relationType":"references","to":"src/composables/useSimulationStore.ts"}
+{"type":"relation","from":"docs/DESIGN_DECISIONS.md","relationType":"references","to":"docs/TELEMETRY.md"}
+{"type":"relation","from":"docs/DESIGN_DECISIONS.md","relationType":"references","to":"docs/ARCHITECTURE.md"}
+{"type":"relation","from":"docs/README.md","relationType":"links","to":"docs/DESIGN_DECISIONS.md"}
