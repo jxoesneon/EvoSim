@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, unref, computed, watch, defineAsyncComponent } from 'vue'
-import { useSimulationStore } from '../composables/useSimulationStore'
+import { useSimulationStore, type Creature, type Plant, type Corpse } from '../composables/useSimulationStore'
 const CostTelemetryOverlay = defineAsyncComponent(() => import('./CostTelemetryOverlay.vue'))
 import { initWebGL, renderScene, disposeWebGL } from '../webgl/renderer'
 import { useUiPrefs } from '../composables/useUiPrefs'
 
 // Viewport props (canvas size + whether to show overlays)
-const props = defineProps({
+const { width, height, showTelemetry } = defineProps({
   width: {
     type: Number,
     default: window.innerWidth,
@@ -31,7 +31,7 @@ const uiPrefs = useUiPrefs()
 const highlightActive = ref(false)
 const highlightX = ref(0)
 const highlightY = ref(0)
-let highlightTimer: any = null
+let highlightTimer: number | null = null
 
 function worldToScreen(x: number, y: number) {
   const rect = canvasRef.value?.getBoundingClientRect()
@@ -44,7 +44,6 @@ function worldToScreen(x: number, y: number) {
   const sy = ((simulationStore.camera.y + visibleHalfHeight - y) / (visibleHalfHeight * 2)) * rect.height
   const out = { sx: rect.left + sx, sy: rect.top + sy, ok: true }
   try {
-    // eslint-disable-next-line no-console
     if (uiPrefs.isLogOn?.('world_to_screen'))
       console.debug('[Renderer] worldToScreen', {
         world: { x, y },
@@ -59,12 +58,13 @@ function worldToScreen(x: number, y: number) {
   return out
 }
 
-function handleActionNotice(e: CustomEvent) {
-  const detail = e.detail || {}
+type LoggingPrefs = Partial<{ enabled: boolean; types: Record<string, boolean> }>
+
+function handleActionNotice(e: Event) {
+  const detail = (e as CustomEvent).detail || {}
   // TEMP probe: confirm handler fires and show current logging gates
   try {
-    const lg: any = uiPrefs.getLogging?.()
-    // eslint-disable-next-line no-console
+    const lg = (uiPrefs.getLogging?.() ?? {}) as LoggingPrefs
     console.warn('[ActionNotice][probe] fired', {
       type: detail?.type,
       gates: { master: lg?.enabled, action_notice: lg?.types?.action_notice },
@@ -80,7 +80,6 @@ function handleActionNotice(e: CustomEvent) {
   const prev = { x: simulationStore.camera.x, y: simulationStore.camera.y, z: simulationStore.camera.zoom }
   // Debug before
   try {
-    // eslint-disable-next-line no-console
     if (uiPrefs.isLogOn?.('action_notice'))
       console.debug('[ActionNotice] start', {
         type: detail.type,
@@ -95,7 +94,6 @@ function handleActionNotice(e: CustomEvent) {
   const delta = targetZoom - simulationStore.camera.zoom
   if (Math.abs(delta) > 1e-6) simulationStore.zoomCamera?.(delta)
   try {
-    // eslint-disable-next-line no-console
     if (uiPrefs.isLogOn?.('action_notice'))
       console.debug('[ActionNotice] after focus', {
         camAfter: {
@@ -113,16 +111,15 @@ function handleActionNotice(e: CustomEvent) {
     highlightActive.value = true
   }
   // Clear existing timer
-  if (highlightTimer) clearTimeout(highlightTimer)
+  if (highlightTimer) window.clearTimeout(highlightTimer)
   const hold = Math.max(500, Number(prefs.holdMs) || 5000)
-  highlightTimer = setTimeout(() => {
+  highlightTimer = window.setTimeout(() => {
     // Zoom back and roughly center back
     simulationStore.centerCameraOn?.(prev.x, prev.y)
     const back = prev.z - simulationStore.camera.zoom
     if (Math.abs(back) > 1e-6) simulationStore.zoomCamera?.(back)
     highlightActive.value = false
     try {
-      // eslint-disable-next-line no-console
       if (uiPrefs.isLogOn?.('action_notice'))
         console.debug('[ActionNotice] restored', {
           camRestored: {
@@ -202,8 +199,12 @@ const nonPassiveOpts: AddEventListenerOptions = { passive: false }
 
 // Rendering loop utilities
 // Safe RAF for test/SSR environments: use globalThis to avoid unguarded window access
+type GlobalWithRAF = {
+  requestAnimationFrame?: (cb: FrameRequestCallback) => number
+  cancelAnimationFrame?: (id: number) => void
+}
 const raf = (cb: FrameRequestCallback): number => {
-  const g: any = typeof globalThis !== 'undefined' ? (globalThis as any) : undefined
+  const g = (typeof globalThis !== 'undefined' ? (globalThis as unknown as GlobalWithRAF) : undefined)
   if (g && typeof g.requestAnimationFrame === 'function') {
     return g.requestAnimationFrame(cb)
   }
@@ -213,7 +214,7 @@ const raf = (cb: FrameRequestCallback): number => {
   ) as unknown as number
 }
 const caf = (id: number) => {
-  const g: any = typeof globalThis !== 'undefined' ? (globalThis as any) : undefined
+  const g = (typeof globalThis !== 'undefined' ? (globalThis as unknown as GlobalWithRAF) : undefined)
   if (g && typeof g.cancelAnimationFrame === 'function') {
     return g.cancelAnimationFrame(id)
   }
@@ -255,9 +256,9 @@ function updateDebugOverlay(clientX: number, clientY: number) {
   const tol = Math.max(worldPerPxX, worldPerPxY) * tolPx
   const nearest = pickCreatureAt(x, y, tol)
   // Compute actual nearest distance (no tol) for diagnostics
-  const list = unref(simulationStore.creatures) as any[]
+  const list = unref(simulationStore.creatures) as ReadonlyArray<Creature>
   let nearestDist = Infinity
-  let nearestId: any = null
+  let nearestId: string | undefined = undefined
   for (const c of list) {
     const d = Math.hypot((c.x ?? 0) - x, (c.y ?? 0) - y)
     if (d < nearestDist) {
@@ -284,7 +285,7 @@ function updateDebugOverlay(clientX: number, clientY: number) {
   debugY.value = clientY + 12
 }
 let hasDragged = false
-let clickTarget: any | null = null
+let clickTarget: Creature | null = null
 let suppressPan = false
 
 // Batch debug overlay updates to one per animation frame
@@ -308,18 +309,12 @@ const debugX = ref(0)
 const debugY = ref(0)
 // Controlled by store (default off)
 const showDebug = computed(() => simulationStore.simulationParams.showDebugOverlay)
-let clickDetail = 0
 
 // Handle WebGL context setup and main render loop (RAF)
 onMounted(() => {
   if (canvasRef.value) {
     // Initialize WebGL context with our canvas
     initWebGL(canvasRef.value)
-    // Ensure simulation auto-starts on initial mount if not already running
-    if (!unref(simulationStore.isRunning)) {
-      simulationStore.log('[Renderer] Auto-start simulation on mount', { ts: Date.now() })
-      simulationStore.startSimulation?.()
-    }
 
     const loop = () => {
       if (!rafActive) return
@@ -337,9 +332,9 @@ onMounted(() => {
       }
       if (canvasRef.value) {
         renderScene(
-          unref(simulationStore.creatures) as any,
-          unref(simulationStore.plants) as any,
-          unref(simulationStore.corpses) as any,
+          unref(simulationStore.creatures) as ReadonlyArray<Creature>,
+          unref(simulationStore.plants) as ReadonlyArray<Plant>,
+          unref(simulationStore.corpses) as ReadonlyArray<Corpse>,
         )
       }
       // Re-check rafActive and halt token to avoid rescheduling after a mid-frame stop/reset
@@ -374,9 +369,9 @@ onMounted(() => {
       // Render one final frame to reflect latest state while paused
       if (canvasRef.value) {
         renderScene(
-          unref(simulationStore.creatures) as any,
-          unref(simulationStore.plants) as any,
-          unref(simulationStore.corpses) as any,
+          unref(simulationStore.creatures) as ReadonlyArray<Creature>,
+          unref(simulationStore.plants) as ReadonlyArray<Plant>,
+          unref(simulationStore.corpses) as ReadonlyArray<Corpse>,
         )
       }
       simulationStore.log('[Renderer] RAF stopped', { ts: Date.now() })
@@ -418,9 +413,8 @@ onMounted(() => {
   // Keyboard shortcut: Cmd + Ctrl + C copies debug text
   window.addEventListener('keydown', handleKeyDown)
   // Action-notice listener
-  // eslint-disable-next-line no-console
   console.warn('[ActionNotice][probe] registering window listener')
-  window.addEventListener('action-notice', handleActionNotice as any)
+  window.addEventListener('action-notice', handleActionNotice)
 })
 
 onBeforeUnmount(() => {
@@ -441,9 +435,8 @@ onBeforeUnmount(() => {
     canvasRef.value.removeEventListener('touchend', handleTouchEnd, passiveOpts)
   }
   window.removeEventListener('keydown', handleKeyDown)
-  // eslint-disable-next-line no-console
   console.warn('[ActionNotice][probe] unregistering window listener')
-  window.removeEventListener('action-notice', handleActionNotice as any)
+  window.removeEventListener('action-notice', handleActionNotice)
   // Fully dispose WebGL resources and context
   disposeWebGL()
 })
@@ -593,8 +586,8 @@ function handleClick(event: MouseEvent) {
 
 // Find nearest creature within tolerance (in world units)
 function pickCreatureAt(x: number, y: number, tol: number) {
-  const list = unref(simulationStore.creatures) as any[]
-  let best: any = null
+  const list = unref(simulationStore.creatures) as ReadonlyArray<Creature>
+  let best: Creature | null = null
   let bestDist = Infinity
   for (const c of list) {
     const baseR = Math.max(c?.radius ?? 0, 10)
@@ -610,8 +603,8 @@ function pickCreatureAt(x: number, y: number, tol: number) {
 
 // Fallback: choose the nearest creature if it's within tolerance (ignoring radius)
 function pickNearestWithinTol(x: number, y: number, tol: number) {
-  const list = unref(simulationStore.creatures) as any[]
-  let best: any = null
+  const list = unref(simulationStore.creatures) as ReadonlyArray<Creature>
+  let best: Creature | null = null
   let bestDist = Infinity
   for (const c of list) {
     const d = Math.hypot((c.x ?? 0) - x, (c.y ?? 0) - y)
@@ -629,7 +622,6 @@ function handleWheel(event: WheelEvent) {
   const before = simulationStore.camera.zoom
   simulationStore.zoomCamera(delta)
   try {
-    // eslint-disable-next-line no-console
     if (uiPrefs.isLogOn?.('input'))
       console.debug('[Input] wheel', {
         deltaY: event.deltaY,

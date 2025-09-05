@@ -2,10 +2,43 @@
 import { computed } from 'vue'
 import { useSimulationStore } from '../composables/useSimulationStore'
 
+type CreatureCost = {
+  totalEnergyPerSec?: number
+  locomotion?: number
+  envTotal?: number
+  envSwim?: number
+  envWind?: number
+  envCold?: number
+  envHeat?: number
+  envHumid?: number
+  envOxy?: number
+  envNoise?: number
+  envDisease?: number
+  sprintOverflowE?: number
+  postureE?: number
+  drinkE?: number
+  harvestE?: number
+  scavengeE?: number
+  matingE?: number
+  gestationE?: number
+  attackE?: number
+  ambientHealthDelta?: number
+}
+
+type CorpseDecay = {
+  total?: number
+  base?: number
+  temp?: number
+  humid?: number
+  rain?: number
+  wet?: number
+}
+
 const simulationStore = useSimulationStore()
 const enabled = computed(() => simulationStore.simulationParams.enableCostTelemetry)
-// Computed array (template unwraps computed refs)
-const list = computed<any[]>(() => simulationStore.creatures as unknown as any[])
+
+// Use refs directly; templates unwrap them automatically
+const list = simulationStore.creatures
 
 // Time/weather/terrain/decay telemetry
 const worldTsec = computed(() => simulationStore.worldTimeSec?.value ?? 0)
@@ -14,11 +47,9 @@ const worldSeason = computed(() => simulationStore.season01?.value ?? 0)
 const worldTsecStr = computed(() => Number(worldTsec.value).toFixed(1))
 const worldDoyStr = computed(() => Number(worldDoy.value).toFixed(3))
 const worldSeasonStr = computed(() => Number(worldSeason.value).toFixed(3))
-const worldTimeScale = computed(() =>
-  Number((simulationStore as any).simulationParams?.worldTimeScale ?? 1),
-)
+const worldTimeScale = computed(() => Number(simulationStore.simulationParams.worldTimeScale ?? 1))
 const realSecondsPerDay = computed(() =>
-  Number((simulationStore as any).simulationParams?.realSecondsPerDay ?? 0),
+  Number(simulationStore.simulationParams.realSecondsPerDay ?? 0),
 )
 const atCamera = computed(() => {
   const cam = simulationStore.camera
@@ -27,14 +58,16 @@ const atCamera = computed(() => {
   return { w, tr }
 })
 const corpseStats = computed(() => {
-  const corpsesRef: any = (simulationStore as any).corpses
-  const list: any[] = Array.isArray(corpsesRef?.value) ? corpsesRef.value : []
+  const list = Array.isArray(simulationStore.corpses?.value)
+    ? simulationStore.corpses.value
+    : []
   const n = list.length
   let sum = 0
   let withFrac = 0
-  for (const c of list as any) {
-    if (typeof c?.decayFrac01 === 'number') {
-      sum += c.decayFrac01
+  for (const c of list) {
+    const frac = (c as { decayFrac01?: number }).decayFrac01
+    if (typeof frac === 'number') {
+      sum += frac
       withFrac++
     }
   }
@@ -42,30 +75,29 @@ const corpseStats = computed(() => {
 })
 
 // Parity stats (env + corpse)
-const parity = computed<any>(() => (simulationStore as any).parityStats)
+const parity = computed(() => simulationStore.parityStats)
 
-const corpsesList = computed<any[]>(() => {
-  const ref: any = (simulationStore as any).corpses
-  return Array.isArray(ref?.value) ? ref.value : []
+const corpsesList = computed(() => {
+  return Array.isArray(simulationStore.corpses?.value) ? simulationStore.corpses.value : []
 })
 
-function costOf(c: any): any | null {
-  return (c && (c as any)._lastCost) || null
+function costOf(c: unknown): CreatureCost | null {
+  return (c && (c as { _lastCost?: CreatureCost })._lastCost) || null
 }
-function decayOf(co: any): any | null {
-  return (co && (co as any)._lastDecay) || null
+function decayOf(co: unknown): CorpseDecay | null {
+  return (co && (co as { _lastDecay?: CorpseDecay })._lastDecay) || null
 }
-function fmt(n: any, digits = 3): string {
+function fmt(n: unknown, digits = 3): string {
   if (n == null || Number.isNaN(Number(n))) return '-'
   const num = Number(n)
   return num.toFixed(digits)
 }
-function hex(n: any): string {
+function hex(n: unknown): string {
   if (n == null || Number.isNaN(Number(n))) return '0x0'
   const v = (Number(n) >>> 0).toString(16)
   return '0x' + v
 }
-function pct(n: any): string {
+function pct(n: unknown): string {
   if (n == null || !Number.isFinite(Number(n))) return '-'
   return (Number(n) * 100).toFixed(2) + '%'
 }

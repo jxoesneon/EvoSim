@@ -51,9 +51,51 @@ interface UiPrefsState {
 
 const STORAGE_KEY = 'evo:ui-prefs'
 // Debounce handle for vision settings persistence
-let visionSaveHandle: any = null
+let visionSaveHandle: ReturnType<typeof setTimeout> | null = null
 // Explicit gate: block saves until app signals hydration is complete
 let suppressSaves = true
+
+// Typed defaults for optional sub-objects
+function defaultStatsPanel(): NonNullable<UiPrefsState['statsPanel']> {
+  return {
+    activeTab: 'stats',
+    showInputs: true,
+    showOutputs: true,
+    showConnections: true,
+    sortBy: 'time_desc',
+    typeFilters: {},
+    keyFilters: {},
+  }
+}
+
+function defaultMovementActivity(): NonNullable<UiPrefsState['movementActivity']> {
+  return { showThreshold: true, histBins: 20 }
+}
+
+function defaultPopulationDynamics(): NonNullable<UiPrefsState['populationDynamics']> {
+  return { hidden: { c: false, p: false, co: false }, smoothing: false, smoothWin: 5, windowSel: 'full' }
+}
+
+function defaultVision(): NonNullable<UiPrefsState['vision']> {
+  return { show: true, fovDeg: 90, range: 80 }
+}
+
+function defaultActionRangeOverlay(): NonNullable<UiPrefsState['actionRangeOverlay']> {
+  return { enabled: false, byType: { eat: true, drink: true, attack: true, mate: true }, alpha: 0.2, thin: true }
+}
+
+function defaultActionNoticing(): NonNullable<UiPrefsState['actionNoticing']> {
+  return {
+    enabled: true,
+    byAction: { eats_plant: true, drinks_water: true, attacks: true, mates: true, born: true, dies: true },
+    holdMs: 5000,
+    zoom: 2,
+  }
+}
+
+function defaultLogging(): NonNullable<UiPrefsState['logging']> {
+  return { enabled: true, types: { action_notice: true, camera: true, renderer: true, input: true, world_to_screen: true, vision: false, ui_prefs: false, creature_event: false } }
+}
 
 function load(): UiPrefsState {
   try {
@@ -345,7 +387,8 @@ export function useUiPrefs() {
     return { ...(state.statsPanel as NonNullable<UiPrefsState['statsPanel']>) }
   }
   function setStatsPanel(patch: Partial<NonNullable<UiPrefsState['statsPanel']>>) {
-    state.statsPanel = { ...(state.statsPanel || ({} as any)), ...(patch as any) }
+    const base = state.statsPanel ?? defaultStatsPanel()
+    state.statsPanel = { ...base, ...patch }
     save(state)
   }
   // MovementActivity
@@ -353,7 +396,8 @@ export function useUiPrefs() {
     return { ...(state.movementActivity as NonNullable<UiPrefsState['movementActivity']>) }
   }
   function setMovementActivity(patch: Partial<NonNullable<UiPrefsState['movementActivity']>>) {
-    state.movementActivity = { ...(state.movementActivity || ({} as any)), ...(patch as any) }
+    const base = state.movementActivity ?? defaultMovementActivity()
+    state.movementActivity = { ...base, ...patch }
     save(state)
   }
   // PopulationDynamics
@@ -361,7 +405,8 @@ export function useUiPrefs() {
     return { ...(state.populationDynamics as NonNullable<UiPrefsState['populationDynamics']>) }
   }
   function setPopulationDynamics(patch: Partial<NonNullable<UiPrefsState['populationDynamics']>>) {
-    state.populationDynamics = { ...(state.populationDynamics || ({} as any)), ...(patch as any) }
+    const base = state.populationDynamics ?? defaultPopulationDynamics()
+    state.populationDynamics = { ...base, ...patch }
     save(state)
   }
   // Vision settings
@@ -372,15 +417,15 @@ export function useUiPrefs() {
     try {
       console.log('[UiPrefs] setVisionSettings patch', patch)
     } catch {}
-    const current = state.vision || ({} as any)
-    const next = { ...current, ...(patch as any) }
+    const current = state.vision ?? defaultVision()
+    const next: NonNullable<UiPrefsState['vision']> = { ...current, ...patch }
     // Guard: if no actual change, skip scheduling save
     const same =
       current.show === next.show &&
       Number(current.fovDeg) === Number(next.fovDeg) &&
       Number(current.range) === Number(next.range)
     if (same) return
-    state.vision = next as any
+    state.vision = next
     // Debounce saves to reduce spam from rapid updates
     if (visionSaveHandle) clearTimeout(visionSaveHandle)
     visionSaveHandle = setTimeout(() => {
@@ -393,7 +438,8 @@ export function useUiPrefs() {
     return { ...(state.actionRangeOverlay as NonNullable<UiPrefsState['actionRangeOverlay']>) }
   }
   function setActionRangeOverlay(patch: Partial<NonNullable<UiPrefsState['actionRangeOverlay']>>) {
-    state.actionRangeOverlay = { ...(state.actionRangeOverlay || ({} as any)), ...(patch as any) }
+    const base = state.actionRangeOverlay ?? defaultActionRangeOverlay()
+    state.actionRangeOverlay = { ...base, ...patch }
     save(state)
   }
   // Action Noticing
@@ -401,7 +447,8 @@ export function useUiPrefs() {
     return { ...(state.actionNoticing as NonNullable<UiPrefsState['actionNoticing']>) }
   }
   function setActionNoticing(patch: Partial<NonNullable<UiPrefsState['actionNoticing']>>) {
-    state.actionNoticing = { ...(state.actionNoticing || ({} as any)), ...(patch as any) }
+    const base = state.actionNoticing ?? defaultActionNoticing()
+    state.actionNoticing = { ...base, ...patch }
     save(state)
   }
   // Logging preferences
@@ -409,9 +456,10 @@ export function useUiPrefs() {
     return { ...(state.logging as NonNullable<UiPrefsState['logging']>) }
   }
   function setLogging(patch: Partial<NonNullable<UiPrefsState['logging']>>) {
-    const next = { ...(state.logging || ({} as any)), ...(patch as any) }
-    if (patch?.types) next.types = { ...(state.logging?.types || {}), ...patch.types }
-    state.logging = next as any
+    const base = state.logging ?? defaultLogging()
+    const next: NonNullable<UiPrefsState['logging']> = { ...base, ...patch }
+    if (patch?.types) next.types = { ...base.types, ...patch.types }
+    state.logging = next
     save(state)
   }
   function isLogOn(type: string) {

@@ -1,37 +1,39 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, ref, computed, watch, nextTick } from 'vue'
+import { onMounted, onBeforeUnmount, ref, computed, watch } from 'vue'
 import { Bars3Icon, XMarkIcon, PlayIcon, StopIcon, ArrowPathIcon } from '@heroicons/vue/24/outline'
-// @ts-ignore - SFC default export provided by Vue compiler
 import EcosystemRenderer from './components/EcosystemRenderer.vue'
-// @ts-ignore - SFC default export provided by Vue compiler
-// @ts-ignore - SFC default export provided by Vue compiler
 import StatsPanel from './components/StatsPanel.vue'
-// @ts-ignore - SFC default export provided by Vue compiler
 import ModalContainer from './components/ModalContainer.vue'
-// @ts-ignore - SFC default export provided by Vue compiler
 import SummaryDashboard from './components/summary/SummaryDashboard.vue'
-import { useSimulationStore } from './composables/useSimulationStore'
+import { useSimulationStore, type Creature } from './composables/useSimulationStore'
 import { enableFPSMeter, disableFPSMeter } from './webgl/renderer'
-// @ts-ignore - SFC default export provided by Vue compiler
 import GeneralStats from './components/GeneralStats.vue'
-// @ts-ignore - SFC default export provided by Vue compiler
 import HallOfFame from './components/HallOfFame.vue'
-// @ts-ignore - SFC default export provided by Vue compiler
 import EventNotifications from './components/EventNotifications.vue'
-import { Switch, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/vue'
 import { useUiPrefs, allowUiPrefsSaves } from './composables/useUiPrefs'
+import SplashOverlay from './components/SplashOverlay.vue'
+
 const simulationStore = useSimulationStore()
 // Persisted UI preferences
 const uiPrefs = useUiPrefs()
 // Live selection: keep only the selected id and derive the creature from the store list each render
 const selectedId = ref<string | undefined>(undefined)
-const selectedCreatureLive = computed<Record<string, any> | undefined>(() => {
+const selectedCreatureLive = computed<Creature | undefined>(() => {
   const id = selectedId.value
   if (!id) return undefined
-  return (simulationStore.creatures.value as any[]).find((c: any) => c.id === id)
+  const list = simulationStore.creatures.value as Creature[]
+  return list.find((c) => c.id === id)
 })
 const showWasmDiag = ref(false)
 const retryingWasm = ref(false)
+
+// WASM status bindings
+const wasmAvailable = computed<boolean>(() => !!simulationStore.wasmStatus.available)
+const wasmError = computed<string | null>(() => simulationStore.wasmStatus.lastError)
+// Overlay props
+const splashVisible = computed(() => !wasmAvailable.value)
+const splashBrainMode = computed(() => simulationStore.simulationParams.brainMode as 'OG' | 'Zegion')
+const splashTargetFps = computed(() => simulationStore.simulationParams.targetFps)
 
 async function onRetryWasm() {
   retryingWasm.value = true
@@ -52,7 +54,7 @@ const modalKind = ref<'html' | 'gen'>('html')
 // Creatures list binding
 const creatures = computed(() => simulationStore.creatures.value)
 
-function focusAndFollow(creature: any) {
+function focusAndFollow(creature: Creature) {
   try {
     simulationStore.setSelectedCreature?.(creature.id)
     simulationStore.setFollowSelected?.(true)
@@ -63,13 +65,13 @@ function focusAndFollow(creature: any) {
   }
 }
 
-function onCreatureSelected(creature: any) {
+function onCreatureSelected(creature: Creature) {
   // When clicking on the map: focus/follow then open stats
   focusAndFollow(creature)
   displayCreatureStats(creature)
 }
 
-function displayCreatureStats(creature: Record<string, any>) {
+function displayCreatureStats(creature: { id: string }) {
   console.debug('[App] displayCreatureStats', { id: creature?.id })
   selectedId.value = creature?.id
   showStatsPanel.value = true
@@ -79,22 +81,17 @@ function onStatsClose() {
   showStatsPanel.value = false
 }
 
-function showModalDialog(title: string, content: string) {
-  modalTitle.value = title
-  modalContent.value = content
-  modalKind.value = 'html'
-  showModal.value = true
-}
+// (Removed) showModalDialog was unused
 
 // Settings bindings
 const showWeather = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).showWeather as boolean,
+  get: () => simulationStore.simulationParams.showWeather,
   set: (v: boolean) => simulationStore.setShowWeather(v),
 })
 
 // Debug overlay setting (mouse position / picking diagnostics)
 const showDebugOverlay = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).showDebugOverlay as boolean,
+  get: () => simulationStore.simulationParams.showDebugOverlay,
   set: (v: boolean) => simulationStore.setShowDebugOverlay?.(!!v),
 })
 
@@ -128,14 +125,14 @@ const loggingTypes = ref<Record<string, boolean>>({
 })
 function toggleLogType(k: string) {
   loggingTypes.value[k] = !loggingTypes.value[k]
-  uiPrefs.setLogging({ types: { [k]: loggingTypes.value[k] } as any })
+  uiPrefs.setLogging({ types: { [k]: loggingTypes.value[k] } as Record<string, boolean> })
 }
 
 // Debug-only logger for temporary VisionPrefs diagnostics
-function visionLog(...args: any[]) {
+function visionLog(...args: unknown[]) {
   if (debugLogging.value) console.log(...args)
 }
-function visionWarn(...args: any[]) {
+function visionWarn(...args: unknown[]) {
   if (debugLogging.value) console.warn(...args)
 }
 
@@ -258,25 +255,21 @@ const isRunning = computed(() => simulationStore.isRunning)
 
 // Auto-continue binding for quick toggle in compact stats
 const autoCont = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).autoContinueGenerations as boolean,
+  get: () => simulationStore.simulationParams.autoContinueGenerations,
   set: (v: boolean) => simulationStore.setAutoContinueGenerations?.(!!v),
 })
 
 // Vision controls (now persisted via useUiPrefs here)
 const savedVision = uiPrefs.getVisionSettings()
 const showVisionCones = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).showVisionCones as boolean,
+  get: () => simulationStore.simulationParams.showVisionCones,
   set: (v: boolean) => {
     // Use store setter (simulationParams is exposed as readonly)
     simulationStore.setShowVisionCones?.(!!v)
   },
 })
-const visionFovDeg = ref<number>(
-  (savedVision.fovDeg ?? (simulationStore.simulationParams as any).visionFovDeg) ?? 90,
-)
-const visionRange = ref<number>(
-  (savedVision.range ?? (simulationStore.simulationParams as any).visionRange) ?? 80,
-)
+const visionFovDeg = ref<number>((savedVision.fovDeg ?? simulationStore.simulationParams.visionFovDeg) ?? 90)
+const visionRange = ref<number>((savedVision.range ?? simulationStore.simulationParams.visionRange) ?? 80)
 function applyVisionParams() {
   const f = Number(visionFovDeg.value)
   const r = Number(visionRange.value)
@@ -316,17 +309,21 @@ function applySeed() {
 }
 
 // Zegion activations (hidden/output) - persisted
-const activationNames = computed(() => simulationStore.activationNames as string[])
-const selHidden = ref<string>((simulationStore.zegionActivations as any).hidden)
-const selOutput = ref<string>((simulationStore.zegionActivations as any).output)
+const activationNames = computed(() => simulationStore.activationNames as readonly string[])
+type ActivationName = Parameters<typeof simulationStore.setZegionActivations>[0]
+const selHidden = ref<ActivationName>(simulationStore.zegionActivations.hidden as ActivationName)
+const selOutput = ref<ActivationName>(simulationStore.zegionActivations.output as ActivationName)
 // Override with saved prefs if present
 try {
   const act = uiPrefs.getActivations()
-  if (act.hidden) selHidden.value = act.hidden
-  if (act.output) selOutput.value = act.output
+  if (act.hidden && activationNames.value.includes(act.hidden)) selHidden.value = act.hidden as ActivationName
+  if (act.output && activationNames.value.includes(act.output)) selOutput.value = act.output as ActivationName
 } catch {}
 function applyActivations() {
-  simulationStore.setZegionActivations(selHidden.value as any, selOutput.value as any)
+  simulationStore.setZegionActivations(
+    selHidden.value as Parameters<typeof simulationStore.setZegionActivations>[0],
+    selOutput.value as Parameters<typeof simulationStore.setZegionActivations>[1],
+  )
   uiPrefs.setActivations(selHidden.value, selOutput.value)
 }
 
@@ -352,80 +349,80 @@ async function onFileChange(e: Event) {
 
 // Instance update throttle binding
 const instanceUpdateEvery = computed<number>({
-  get: () => (simulationStore.simulationParams as any).instanceUpdateEvery as number,
+  get: () => simulationStore.simulationParams.instanceUpdateEvery,
   set: (v: number) => simulationStore.setInstanceUpdateEvery(v),
 })
 
 const instanceUpdateChunk = computed<number>({
-  get: () => (simulationStore.simulationParams as any).instanceUpdateChunk as number,
+  get: () => simulationStore.simulationParams.instanceUpdateChunk,
   set: (v: number) => simulationStore.setInstanceUpdateChunk(v),
 })
 
 // Adaptive performance bindings
 const adaptivePerfEnabled = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).adaptivePerfEnabled as boolean,
+  get: () => simulationStore.simulationParams.adaptivePerfEnabled,
   set: (v: boolean) => simulationStore.setAdaptivePerfEnabled(v),
 })
 const targetFps = computed<number>({
-  get: () => (simulationStore.simulationParams as any).targetFps as number,
+  get: () => simulationStore.simulationParams.targetFps,
   set: (v: number) => simulationStore.setTargetFps(v),
 })
 
 // Weather opacity binding
 const weatherOpacity = computed<number>({
-  get: () => (simulationStore.simulationParams as any).weatherOpacity as number,
+  get: () => simulationStore.simulationParams.weatherOpacity,
   set: (v: number) => simulationStore.setWeatherOpacity(v),
 })
 
 // Brain mode binding
 const brainMode = computed<'OG' | 'Zegion'>({
-  get: () => (simulationStore.simulationParams as any).brainMode as 'OG' | 'Zegion',
+  get: () => simulationStore.simulationParams.brainMode as 'OG' | 'Zegion',
   set: (v: 'OG' | 'Zegion') => simulationStore.setBrainMode(v),
 })
 
 // Biology/Evolution related bindings
 const lifespanMultiplier = computed<number>({
-  get: () => (simulationStore.simulationParams as any).lifespanMultiplier as number,
+  get: () => simulationStore.simulationParams.lifespanMultiplier,
   set: (v: number) => simulationStore.setLifespanMultiplier(v),
 })
 const gestationPeriod = computed<number>({
-  get: () => (simulationStore.simulationParams as any).gestationPeriod as number,
+  get: () => simulationStore.simulationParams.gestationPeriod,
   set: (v: number) => simulationStore.setGestationPeriod(v),
 })
 const reproductionEnergy = computed<number>({
-  get: () => (simulationStore.simulationParams as any).reproductionEnergy as number,
+  get: () => simulationStore.simulationParams.reproductionEnergy,
   set: (v: number) => simulationStore.setReproductionEnergy(v),
 })
 
 // Follow selected and key simulation settings
 const followSelected = computed<boolean>({
-  get: () => (simulationStore.simulationParams as any).followSelected as boolean,
+  get: () => simulationStore.simulationParams.followSelected,
   set: (v: boolean) => simulationStore.setFollowSelected(v),
 })
 const mutationRate = computed<number>({
-  get: () => (simulationStore.simulationParams as any).mutationRate as number,
+  get: () => simulationStore.simulationParams.mutationRate,
   set: (v: number) => simulationStore.setMutationRate(v),
 })
 const mutationAmount = computed<number>({
-  get: () => (simulationStore.simulationParams as any).mutationAmount as number,
+  get: () => simulationStore.simulationParams.mutationAmount,
   set: (v: number) => simulationStore.setMutationAmount(v),
 })
 const plantSpawnRate = computed<number>({
-  get: () => (simulationStore.simulationParams as any).plantSpawnRate as number,
+  get: () => simulationStore.simulationParams.plantSpawnRate,
   set: (v: number) => simulationStore.setPlantSpawnRate(v),
 })
 const waterLevel = computed<number>({
-  get: () => (simulationStore.simulationParams as any).waterLevel as number,
+  get: () => simulationStore.simulationParams.waterLevel,
   set: (v: number) => simulationStore.setWaterLevel(v),
 })
 
 // Generation control bindings
 const movementThreshold = computed<number>({
-  get: () => (simulationStore.simulationParams as any).movementThreshold as number,
+  get: () => simulationStore.simulationParams.movementThreshold,
   set: (v: number) => simulationStore.setMovementThreshold(v),
 })
 const stagnantTicksLimit = computed<number>({
-  get: () => (simulationStore.simulationParams as any).stagnantTicksLimit as number,
+  get: () => simulationStore.simulationParams.stagnantTicksLimit,
   set: (v: number) => simulationStore.setStagnantTicksLimit(v),
 })
 
@@ -446,8 +443,9 @@ async function onSaveJSONBin() {
         text: `Save failed: ${String(res.error ?? 'unknown error')}`,
       }
     }
-  } catch (e: any) {
-    jsonBinMsg.value = { kind: 'err', text: `Save failed: ${e?.message || String(e)}` }
+  } catch (e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e)
+    jsonBinMsg.value = { kind: 'err', text: `Save failed: ${msg}` }
   } finally {
     jsonBinLoading.value = false
   }
@@ -466,8 +464,9 @@ async function onLoadJSONBin() {
         text: `Load failed: ${String(res.error ?? 'unknown error')}`,
       }
     }
-  } catch (e: any) {
-    jsonBinMsg.value = { kind: 'err', text: `Load failed: ${e?.message || String(e)}` }
+  } catch (e: unknown) {
+    const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: unknown }).message) : String(e)
+    jsonBinMsg.value = { kind: 'err', text: `Load failed: ${msg}` }
   } finally {
     jsonBinLoading.value = false
   }
@@ -477,8 +476,8 @@ onMounted(() => {
   simulationStore.initialize()
   // Expose a test-only toggle to unmount/mount the renderer (automation only)
   try {
-    if (typeof navigator !== 'undefined' && (navigator as any).webdriver) {
-      ;(window as any).__toggleRenderer = () => {
+    if (typeof navigator !== 'undefined' && (navigator as Navigator & { webdriver?: boolean }).webdriver) {
+      ;(window as Window & { __toggleRenderer?: () => void }).__toggleRenderer = () => {
         showRenderer.value = !showRenderer.value
       }
     }
@@ -487,18 +486,18 @@ onMounted(() => {
   try {
     const v = uiPrefs.getVisionSettings()
     // Apply via store setters (avoid mutating readonly proxies)
-    const show = !!(v.show ?? (simulationStore.simulationParams as any).showVisionCones ?? true)
-    const fov = Number(v.fovDeg ?? (simulationStore.simulationParams as any).visionFovDeg ?? 90)
-    const rng = Number(v.range ?? (simulationStore.simulationParams as any).visionRange ?? 80)
+    const show = !!(v.show ?? simulationStore.simulationParams.showVisionCones ?? true)
+    const fov = Number(v.fovDeg ?? simulationStore.simulationParams.visionFovDeg ?? 90)
+    const rng = Number(v.range ?? simulationStore.simulationParams.visionRange ?? 80)
     simulationStore.setShowVisionCones?.(show)
     simulationStore.setVisionFovDeg?.(fov)
     simulationStore.setVisionRange?.(rng)
     // Sync UI inputs
-    visionFovDeg.value = (simulationStore.simulationParams as any).visionFovDeg
-    visionRange.value = (simulationStore.simulationParams as any).visionRange
+    visionFovDeg.value = simulationStore.simulationParams.visionFovDeg
+    visionRange.value = simulationStore.simulationParams.visionRange
     visionLog('[VisionPrefs][App] onMounted hydration', {
       v,
-      show: (simulationStore.simulationParams as any).showVisionCones,
+      show: simulationStore.simulationParams.showVisionCones,
       fov: visionFovDeg.value,
       range: visionRange.value,
       ls: localStorage.getItem('evo:ui-prefs'),
@@ -516,7 +515,10 @@ onMounted(() => {
   // Apply persisted seed and activations into store
   try {
     simulationStore.setBrainSeed?.(Number(brainSeed.value) >>> 0)
-    simulationStore.setZegionActivations(selHidden.value as any, selOutput.value as any)
+    simulationStore.setZegionActivations(
+      selHidden.value as ActivationName,
+      selOutput.value as ActivationName,
+    )
   } catch {}
   // Hydration complete: now allow UiPrefs to save deterministically
   try {
@@ -542,7 +544,7 @@ onBeforeUnmount(() => {
 watch(
   () => simulationStore.genEndToken.value,
   () => {
-    const auto = (simulationStore.simulationParams as any).autoContinueGenerations as boolean
+    const auto = simulationStore.simulationParams.autoContinueGenerations
     if (!auto) {
       // Ensure simulation is fully stopped before showing the summary modal
       try {
@@ -551,7 +553,7 @@ watch(
         console.warn('Failed to stop simulation on gen end', e)
       }
       const ended = simulationStore.lastGenEnd.value
-      const genNum = ended?.gen ?? (simulationStore.generation as any)
+      const genNum = ended?.gen ?? simulationStore.generation.value
       modalTitle.value = `Generation ${genNum} Summary`
       modalContent.value = ''
       modalKind.value = 'gen'
@@ -577,6 +579,15 @@ const showRenderer = ref(true)
   <div id="app" class="drawer drawer-end">
     <input id="main-drawer" type="checkbox" class="drawer-toggle" />
     <div class="drawer-content flex flex-col h-screen w-screen overflow-hidden">
+      <!-- Splash Overlay -->
+      <SplashOverlay
+        :visible="splashVisible"
+        :error="wasmError"
+        :retrying="retryingWasm"
+        :brain-mode="splashBrainMode"
+        :target-fps="splashTargetFps"
+        @retry="onRetryWasm"
+      />
       <!-- Navbar -->
       <div class="navbar bg-transparent shadow-none z-20">
         <div class="navbar-start">

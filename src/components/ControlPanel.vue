@@ -68,6 +68,14 @@ function toggleDebugOverlay() {
   store.setShowDebugOverlay?.(showDebugOverlay.value)
 }
 
+// Performance throttles (overlay + parity)
+const overlayEvery = ref<number>(store.simulationParams.overlayUpdateEvery ?? 2)
+const parityEvery = ref<number>(store.simulationParams.parityCheckEvery ?? 10)
+function applyThrottles() {
+  store.setOverlayUpdateEvery?.(Number(overlayEvery.value))
+  store.setParityCheckEvery?.(Number(parityEvery.value))
+}
+
 // Logs prefs (global + per-type pills)
 const logEnabled = ref<boolean>(!!(prefs.getLogging?.().enabled ?? true))
 const defaultTypes = {
@@ -224,6 +232,31 @@ async function onFileChange(e: Event) {
           />
         </div>
       </div>
+    </div>
+
+    <!-- Perf Throttles -->
+    <div class="hidden md:flex items-center gap-2 pl-2 ml-1 border-l border-base-300">
+      <span class="text-xs text-gray-600">Perf</span>
+      <label class="text-[10px] text-gray-600 flex items-center gap-1" title="Overlay update interval (frames)">
+        <span>Overlay</span>
+        <input
+          v-model.number="overlayEvery"
+          @change="applyThrottles"
+          type="number"
+          min="1"
+          class="input input-2xs w-16"
+        />
+      </label>
+      <label class="text-[10px] text-gray-600 flex items-center gap-1" title="Parity check interval (frames)">
+        <span>Parity</span>
+        <input
+          v-model.number="parityEvery"
+          @change="applyThrottles"
+          type="number"
+          min="1"
+          class="input input-2xs w-16"
+        />
+      </label>
     </div>
 
     <!-- Event thresholds (compact) -->

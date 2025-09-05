@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="EvoSim Logo">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="0.6"/>
+    </filter>
+  </defs>
+  <!-- Circle background ring -->
+  <circle cx="48" cy="48" r="42" stroke="url(#g2)" stroke-width="2.5" fill="none" />
+  <!-- Stylized leaf/spiral -->
+  <path d="M28 56c10-14 30-14 40 0c-8 10-24 14-34 10c10 0 18-6 22-12c-6-2-12-2-18 2c6-10 16-14 26-12c-10-10-26-10-36 0z" fill="url(#g1)" filter="url(#soft)"/>
+  <!-- DNA ladder hint -->
+  <g stroke="url(#g2)" stroke-linecap="round">
+    <path d="M36 30c8 10 8 26 0 36" stroke-width="2"/>
+    <path d="M60 30c-8 10-8 26 0 36" stroke-width="2"/>
+    <path d="M40 38h16" stroke-width="1.5"/>
+    <path d="M40 48h16" stroke-width="1.5"/>
+    <path d="M40 58h16" stroke-width="1.5"/>
+  </g>
+</svg>

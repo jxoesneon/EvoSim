@@ -18,19 +18,22 @@ const DEFAULT_SPEC: ZegionSpec = {
   activations: { hidden: 'relu', output: 'tanh' },
 }
 
-function isValidSpec(x: any): x is ZegionSpec {
+function isValidSpec(x: unknown): x is ZegionSpec {
   return (
-    x &&
-    Array.isArray(x.architecture) &&
-    x.architecture.every((n: any) => Number.isFinite(n) && n > 0)
+    typeof x === 'object' &&
+    x !== null &&
+    Array.isArray((x as { architecture?: unknown }).architecture) &&
+    (x as { architecture: unknown[] }).architecture.every(
+      (n: unknown) => typeof n === 'number' && Number.isFinite(n) && n > 0,
+    )
   )
 }
 
 // Try ESM import first (Vite supports JSON import). Fallback to fetch.
 export async function getZegionSpec(): Promise<ZegionSpec> {
   try {
-    // @ts-ignore - Allow assert json if available
-    const mod = await import('../../zegion.spec.json', { assert: { type: 'json' } } as any)
+    // @ts-expect-error: JSON import assertion may not be typed depending on TS config
+    const mod = await import('../../zegion.spec.json', { assert: { type: 'json' } } as unknown)
     const raw = (mod?.default ?? mod) as unknown
     if (isValidSpec(raw)) return raw
   } catch {}

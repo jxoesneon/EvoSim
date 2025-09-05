@@ -12,6 +12,74 @@ export interface Camera {
   zoom: number
 }
 
+type LastCostTelemetry = {
+  totalEnergyPerSec: number
+  locomotion: number
+  sprintOverflowE: number
+  drinkE: number
+  harvestE: number
+  scavengeE: number
+  matingE: number
+  gestationE: number
+  attackE: number
+  postureE: number
+  ambientHealthDelta: number
+  envTotal?: number
+  envSwim?: number
+  envWind?: number
+  envCold?: number
+  envHeat?: number
+  envHumid?: number
+  envOxy?: number
+  envNoise?: number
+  envDisease?: number
+}
+type CreatureWithDiag = Creature & CreatureEventFlags & { _lastCost?: LastCostTelemetry }
+
+// Typed augmentation for transient event flags we attach during UI/event processing
+type CreatureEventFlags = {
+  _ev_prev_thirsty?: boolean
+  _ev_prev_hungry?: boolean
+  _ev_prev_fatigued?: boolean
+  _ev_prev_fearful?: boolean
+  _ev_prev_mating?: boolean
+  _ev_prev_health?: number
+  _ev_prev_energy?: number
+  _ev_prev_stamina?: number
+  _ev_prev_nearPlant?: boolean
+  _ev_prev_nearFoodPlant?: boolean
+  _ev_prev_nearCorpse?: boolean
+  _ev_prev_restless?: boolean
+  _ev_prev_nearMate?: boolean
+  _ev_prev_sprinting?: boolean
+  _ev_prev_resting?: boolean
+  _ev_prev_drinking?: boolean
+  _prevVx?: number
+  _prevVy?: number
+  _prevHeading?: number
+  _ev_ticks_since_rest?: number
+}
+
+export interface Phenotype {
+  diet?: 'Herbivore' | 'Carnivore'
+  eyesCount?: number
+  fieldOfViewDeg?: number
+  sightRange?: number
+  size?: number
+  speed?: number
+  eyeAnglesDeg?: number[]
+}
+
+export interface BrainData {
+  layerSizes: number[]
+  weights: number[][]
+  biases: number[][]
+  // optional runtime exposed data for UI/diagnostics
+  inputs?: number[]
+  activations?: number[][]
+  output?: number[]
+}
+
 export interface Creature {
   id: string
   name: string
@@ -28,10 +96,10 @@ export interface Creature {
   lifespan: number
   isPregnant: boolean
   gestationTimer: number
-  childGenes: any
+  childGenes: Record<string, [string, string]> | Array<Record<string, [string, string]>> | null
   genes: Record<string, [string, string]>
-  phenotype: Record<string, any>
-  brain: any
+  phenotype: Phenotype
+  brain: BrainData | null
   radius: number
   maxStamina: number
   communicationColor: { r: number; g: number; b: number }
@@ -63,28 +131,41 @@ export interface Corpse {
 // Singleton store pattern
 let store: ReturnType<typeof createStore> | null = null
 
+// Genetic gene bag for vision-related traits
+type VisionGeneBag = Partial<{
+  V: string[]
+  E: string[]
+  eyesCount: number
+  sightRange: number
+  fieldOfViewDeg: number
+}>
+
+
 export function useSimulationStore() {
   if (!store) {
     store = createStore()
   }
+
+  // (Types for event flags and cost telemetry are defined at top-level and used where needed)
   // Genetic helpers (for future reproduction wiring)
-  function inheritVisionGenes(parentA: any = {}, parentB: any = {}) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function inheritVisionGenes(parentA: VisionGeneBag = {}, parentB: VisionGeneBag = {}): VisionGeneBag {
     // Inherit alleles by sampling one allele from each parent; default to heterozygous if missing
-    const pickAllele = (alleles: any, fallbackDom: string, fallbackRec: string) => {
+    const pickAllele = (alleles: unknown, fallbackDom: string, fallbackRec: string): string => {
       if (Array.isArray(alleles) && alleles.length >= 1) {
         const i = Math.random() < 0.5 ? 0 : Math.min(1, alleles.length - 1)
         return String(alleles[i])
       }
       return Math.random() < 0.5 ? fallbackDom : fallbackRec
     }
-    const child: any = {}
+    const child: VisionGeneBag = {}
     // Sight range allele V/v
-    const aV = Array.isArray(parentA?.V) ? parentA.V : ['V', 'v']
-    const bV = Array.isArray(parentB?.V) ? parentB.V : ['V', 'v']
+    const aV: string[] = Array.isArray(parentA?.V) ? parentA.V! : ['V', 'v']
+    const bV: string[] = Array.isArray(parentB?.V) ? parentB.V! : ['V', 'v']
     child.V = [pickAllele(aV, 'V', 'v'), pickAllele(bV, 'V', 'v')]
     // Field of view allele E/e
-    const aE = Array.isArray(parentA?.E) ? parentA.E : ['E', 'e']
-    const bE = Array.isArray(parentB?.E) ? parentB.E : ['E', 'e']
+    const aE: string[] = Array.isArray(parentA?.E) ? parentA.E! : ['E', 'e']
+    const bE: string[] = Array.isArray(parentB?.E) ? parentB.E! : ['E', 'e']
     child.E = [pickAllele(aE, 'E', 'e'), pickAllele(bE, 'E', 'e')]
     // Eyes count: integer average of parents (if present) rounded, else 2
     const ecA = Number.isFinite(parentA?.eyesCount) ? Number(parentA.eyesCount) : NaN
@@ -95,26 +176,6 @@ export function useSimulationStore() {
     else if (Number.isFinite(ecB)) ec = Math.round(ecB)
     child.eyesCount = Math.max(1, Math.min(6, ec || 2))
     return child
-  }
-
-  function mutateVisionGenes(genes: any, rate = 0.05) {
-    const g = { ...(genes || {}) }
-    // Mutate alleles with low probability by flipping case (dominant/ recessive)
-    const maybeFlip = (allele: string) =>
-      Math.random() < rate
-        ? /[a-z]/.test(allele)
-          ? allele.toUpperCase()
-          : allele.toLowerCase()
-        : allele
-    if (Array.isArray(g.V)) g.V = g.V.map((a: any) => maybeFlip(String(a)))
-    if (Array.isArray(g.E)) g.E = g.E.map((a: any) => maybeFlip(String(a)))
-    // Mutate eyesCount by ±1 with small probability
-    if (Math.random() < rate) {
-      const delta = Math.random() < 0.5 ? -1 : 1
-      const cur = Number.isFinite(g.eyesCount) ? Math.floor(Number(g.eyesCount)) : 2
-      g.eyesCount = Math.max(1, Math.min(6, cur + delta))
-    }
-    return g
   }
 
   return store
@@ -232,12 +293,14 @@ function createStore() {
   const lastGenEnd = ref<null | { gen: number; reason: string; timestamp: number }>(null)
   const genEndToken = ref(0)
   // Snapshot of simulation params from the generation that just ended
-  const lastGenParams = ref<null | Record<string, any>>(null)
+  const lastGenParams = ref<null | Record<string, unknown>>(null)
   // Brain RNG seed handled by deterministic RNG below
   // Brain memoization cache: hash -> { score, brain, genes }
-  const brainCache = reactive<Record<string, { score: number; brain: any; genes: any }>>({})
+  const brainCache = reactive<Record<string, { score: number; brain: BrainData | null; genes: Record<string, [string, string]> }>>({})
   // Debug throttle counter for sparse logs
   let debugSkipCounter = 0
+  // Frame counters for throttling parity diagnostics
+  let parityFrame = 0
   // Bad brain hash library (collapse filters) maintained by simulation
   const badBrainHashes = reactive<Record<string, true>>({})
 
@@ -309,7 +372,11 @@ function createStore() {
   }
 
   // Will hold loaded Zegion spec for JS fallback sizing
-  let zegionSpec: any = null
+  interface ZegionSpec {
+    activations?: { hidden?: string; output?: string }
+    architecture?: number[]
+  }
+  let zegionSpec: ZegionSpec | null = null
 
   // Deterministic brain RNG used for JS fallback brain init
   let rngBrain = new RNG(0xdeadbeef)
@@ -318,7 +385,7 @@ function createStore() {
   nameSvc.prime(60)
 
   // Lightweight JS brain helpers to mirror WASM path enough to compile and run
-  function initBrain(layerSizes: number[], rng: RNG = rngBrain) {
+  function initBrain(layerSizes: number[], rng: RNG = rngBrain): BrainData {
     const weights: number[][] = []
     const biases: number[][] = []
     for (let li = 1; li < layerSizes.length; li++) {
@@ -333,19 +400,19 @@ function createStore() {
       weights.push(w)
       biases.push(b)
     }
-    return { layerSizes: layerSizes.slice(), weights, biases, activations: null as any }
+    return { layerSizes: layerSizes.slice(), weights, biases }
   }
 
   function createGoodBrain(layerSizes: number[], rng: RNG = rngBrain) {
     return initBrain(layerSizes, rng)
   }
 
-  function computeLayerSizesForCreature(eyesCount: number): number[] {
+  function computeLayerSizesForCreature(): number[] {
     // Use selected brain mode to choose base architecture
     return simulationParams.brainMode === 'Zegion' ? [24, 16, 6] : [14, 8, 8]
   }
 
-  function resolveActivationFns(_mode: 'OG' | 'Zegion') {
+  function resolveActivationFns() {
     const hidden = (x: number) => (x > 0 ? x : 0)
     const output = (x: number) => Math.tanh(x)
     return { hidden, output }
@@ -421,7 +488,6 @@ function createStore() {
     // Inputs V2: environment/time aware
     const weather = sampleWeather(c.x, c.y)
     const terrain = sampleTerrain(c.x, c.y)
-    const day = dayOfYear01.value
     // Normalize select env fields to [-1,1] or [0,1] as appropriate
     const tempN = Math.tanh((weather.temperatureC - 15) / 10)
     const humid = weather.humidity01
@@ -455,8 +521,6 @@ function createStore() {
       const speedMag = Math.tanh(Math.hypot(c.vx, c.vy))
       if (simulationParams.inputsVersion === 'v2') {
         // Map to 24 richer vector including weather/terrain and diurnal/season
-        const diurnal = Math.sin((((worldDayFloat.value % 1) + 1) % 1) * Math.PI * 2)
-        const season = Math.sin(day * Math.PI * 2)
         const v = [
           nx,
           ny,
@@ -586,8 +650,12 @@ function createStore() {
     },
   } as const
 
-  function getInputLabelsFor(total: number, mode: 'OG' | 'Zegion', version: 'v1' | 'v2') {
-    const arr = (InputIndexMap as any)[mode]?.[version] as string[] | undefined
+  function getInputLabelsFor(
+    total: number,
+    mode: 'OG' | 'Zegion',
+    version: 'v1' | 'v2',
+  ): ReadonlyArray<string> {
+    const arr = InputIndexMap[mode]?.[version] as ReadonlyArray<string> | undefined
     if (Array.isArray(arr) && arr.length >= total) return arr.slice(0, total)
     if (Array.isArray(arr))
       return [
@@ -634,8 +702,7 @@ function createStore() {
     rngBrain = new RNG(s)
     if (!wasmWorld) {
       for (const c of creatures.value) {
-        const eyes = Number(c.phenotype?.eyesCount) || 2
-        const sizes = computeLayerSizesForCreature(eyes)
+        const sizes = computeLayerSizesForCreature()
         c.brain = initBrain(sizes, rngBrain)
       }
     }
@@ -710,12 +777,9 @@ function createStore() {
     if (arr.length > MAX_EVENTS_PER_CREATURE) arr.splice(0, arr.length - MAX_EVENTS_PER_CREATURE)
     // Dev visibility: log and emit a browser event for overlays/listeners
     try {
-      if ((import.meta as any).env?.DEV && uiPrefs.isLogOn?.('creature_event')) {
-        // eslint-disable-next-line no-console
+      if (import.meta.env.DEV && uiPrefs.isLogOn?.('creature_event')) {
+
         console.debug('[CreatureEvent]', id, ev.type, ev.key, ev.label || '', new Date(ev.ts).toISOString())
-      }
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('creature-event', { detail: { id, ev } }))
       }
     } catch {}
   }
@@ -723,10 +787,11 @@ function createStore() {
   // Debug-only dispatcher: keep debug emissions separate from real events
   // Does not mutate telemetry totals or persistent history arrays
   function pushCreatureEventDebug(id: string, ev: CreatureEvent) {
+    // ... (rest of the code remains the same)
     if (!id) return
     try {
-      if ((import.meta as any).env?.DEV && uiPrefs.isLogOn?.('creature_event')) {
-        // eslint-disable-next-line no-console
+      if (import.meta.env.DEV && uiPrefs.isLogOn?.('creature_event')) {
+
         console.debug('[CreatureEvent][debug]', id, ev.type, ev.key, ev.label || '', new Date(ev.ts).toISOString())
       }
     } catch {}
@@ -736,6 +801,7 @@ function createStore() {
   }
 
   function shouldEmitEvent(id: string, key: CreatureEventKey, minIntervalMs = 1500): boolean {
+    // ... (rest of the code remains the same)
     const arr = creatureEvents[id]
     if (!arr || arr.length === 0) return true
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -778,7 +844,7 @@ function createStore() {
   }
 
   function trimCache(
-    cache: Record<string, { score: number; brain: any; genes: any }>,
+    cache: Record<string, { score: number; brain: BrainData | null; genes: Record<string, [string, string]> }>,
     maxEntries: number,
     trimPercent: number,
   ) {
@@ -804,14 +870,34 @@ function createStore() {
   }
 
   // WebAssembly world reference (created from wasm-bindgen when available)
-  let wasmWorld: any = null
+  interface WasmWorld {
+    // JSON snapshots
+    creatures_json: () => Array<Record<string, unknown>>
+    plants_json: () => Array<Record<string, unknown>>
+    corpses_json: () => Array<Record<string, unknown>>
+    env_costs_json?: () => Array<Record<string, unknown>>
+    // Controls
+    set_brain_mode?: (mode: unknown) => void
+    set_config?: (...args: unknown[]) => void
+    // Spawners
+    spawn_creature?: (x: number, y: number) => void
+    spawn_plant?: (x: number, y: number, radius: number) => void
+    // Misc
+    set_bad_brain_hashes?: (hashes: string[]) => void
+    step?: (dt?: number) => void
+  }
+  let wasmWorld: WasmWorld | null = null
+  // (WASM decay cost shape can be inferred where used; no separate type needed here)
+  // One-time emission guard for WASM-ready event/log
+  let wasmReadyEmitted = false
   const wasmStatus = reactive<{ available: boolean; lastError: string | null }>({
     available: false,
     lastError: null,
   })
 
   // Helper: compute mutation energy cost between two gene maps
-  function computeMutationEnergyCost(before: any, after: any): number {
+  type GenesLike = Record<string, unknown>
+  function computeMutationEnergyCost(before: GenesLike, after: GenesLike): number {
     if (!before || !after) return simulationParams.mutationCostEnergyBase
     let delta = 0
     const keys = new Set([...Object.keys(before), ...Object.keys(after)])
@@ -834,20 +920,20 @@ function createStore() {
   }
 
   // Public API to charge mutation cost for a creature (for future reproduction wiring)
-  function chargeMutationCost(creature: Creature, genesBefore: any, genesAfter: any) {
+  function chargeMutationCost(creature: Creature, genesBefore: GenesLike, genesAfter: GenesLike) {
     const cost = computeMutationEnergyCost(genesBefore, genesAfter)
     creature.energy = Math.max(-50, creature.energy - cost)
   }
 
   // Centralized gated logger
-  function log(...args: any[]) {
+  function log(...args: unknown[]) {
     try {
-      if ((simulationParams as any).debugLogging) console.debug(...args)
+      if (simulationParams.debugLogging) console.debug(...(args as unknown[]))
     } catch {}
   }
 
   function setDebugLogging(v: boolean) {
-    ;(simulationParams as any).debugLogging = !!v
+    simulationParams.debugLogging = !!v
   }
 
   // Brain mode setter (syncs WASM if present and re-inits JS brains)
@@ -955,6 +1041,9 @@ function createStore() {
     weatherOpacity: 0.4,
     instanceUpdateEvery: 1,
     instanceUpdateChunk: 500,
+    // Additional throttles for renderer overlays and parity checks
+    overlayUpdateEvery: 2,
+    parityCheckEvery: 10,
     adaptivePerfEnabled: false,
     targetFps: 60,
     // Simulation speed multiplier (e.g., 0.25x, 0.5x, 1x, 2x, 4x)
@@ -1122,8 +1211,8 @@ function createStore() {
       return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v)
     }
     // Symmetric multiplicative noise around baseline
-    let sight = Math.max(5, base.sightRange * (1 + gaussian() * sigma))
-    let fov = Math.max(10, Math.min(330, base.fieldOfViewDeg * (1 + gaussian() * sigma)))
+    const sight = Math.max(5, base.sightRange * (1 + gaussian() * sigma))
+    const fov = Math.max(10, Math.min(330, base.fieldOfViewDeg * (1 + gaussian() * sigma)))
     let eyes = Math.max(1, Math.min(6, Math.floor(base.eyesCount)))
     if (Math.random() < eyesProb)
       eyes = Math.max(1, Math.min(6, eyes + (Math.random() < 0.5 ? -1 : 1)))
@@ -1159,14 +1248,12 @@ function createStore() {
   // Cloud persistence (JSONBin) config
   const jsonBin = reactive({
     binId: '',
-    apiKeyPresent:
-      typeof import.meta !== 'undefined' && !!(import.meta as any).env?.VITE_JSONBIN_KEY,
+    apiKeyPresent: typeof import.meta !== 'undefined' && !!import.meta.env?.VITE_JSONBIN_KEY,
   })
 
   // Internal: attempt to init WASM with timing diagnostics
   async function tryInitWasm(): Promise<boolean> {
     // Path matches temporary d.ts at src/types/wasm-ecosim.d.ts
-    // @ts-ignore: module is generated after building WASM
     const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
     const isTestEnv = /jsdom|node/i.test(ua)
     wasmDiag.ua = ua
@@ -1186,19 +1273,20 @@ function createStore() {
       ])
       const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now()) as number
       // Ensure wasm module is initialized before using exports
-      if (typeof (mod as any).default === 'function') {
+      const modDefault = (mod as { default?: unknown }).default
+      if (typeof modDefault === 'function') {
         try {
-          const wasmUrl = (wasmUrlMod as any)?.default
+          const wasmUrl = (wasmUrlMod as { default?: string | undefined })?.default
           console.debug('[WASM] init with URL:', wasmUrl)
-          wasmDiag.url = wasmUrl
+          wasmDiag.url = wasmUrl ?? null
           wasmDiag.initUrlTried = true
           // Prefer new object-form init first
           try {
-            await (mod as any).default({ module_or_path: wasmUrl })
+            await (modDefault as (arg?: unknown) => Promise<unknown>)({ module_or_path: wasmUrl })
             wasmDiag.initUrlOk = true
-          } catch (objErr) {
+          } catch {
             // Fallback to deprecated positional url
-            await (mod as any).default(wasmUrl)
+            await (modDefault as (arg?: unknown) => Promise<unknown>)(wasmUrl)
             wasmDiag.initUrlOk = true
           }
           wasmDiag.tInitUrlMs =
@@ -1210,10 +1298,10 @@ function createStore() {
             wasmDiag.initNoArgTried = true
             // Prefer object-form no-arg as well
             try {
-              await (mod as any).default({})
+              await (modDefault as (arg?: unknown) => Promise<unknown>)({})
               wasmDiag.initNoArgOk = true
             } catch {
-              await (mod as any).default()
+              await (modDefault as (arg?: unknown) => Promise<unknown>)()
               wasmDiag.initNoArgOk = true
             }
           } catch (initErr2) {
@@ -1225,9 +1313,29 @@ function createStore() {
         }
       }
       const t2 = (typeof performance !== 'undefined' ? performance.now() : Date.now()) as number
-      wasmWorld = new (mod as any).World(2000, 2000, Date.now() % 0xffff_ffff)
+      const WorldCtorUnknown = (mod as { World?: unknown }).World
+      if (typeof WorldCtorUnknown === 'function') {
+        // Constructor signature (w, h, seed)
+        type WorldCtor = new (w: number, h: number, seed: number) => WasmWorld
+        wasmWorld = new (WorldCtorUnknown as WorldCtor)(2000, 2000, Date.now() % 0xffff_ffff)
+      } else {
+        throw new Error('WASM World constructor not available')
+      }
       wasmStatus.available = true
-      wasmStatus.lastError = null
+      // One-time emission for diagnostics/UI hooks
+      if (!wasmReadyEmitted) {
+        wasmReadyEmitted = true
+        try {
+          console.info('[WASM] Ready')
+        } catch {}
+        if (typeof window !== 'undefined') {
+          try {
+            window.dispatchEvent(
+              new CustomEvent('wasm-ready', { detail: { ts: Date.now() } }),
+            )
+          } catch {}
+        }
+      }
       wasmDiag.createdWorld = true
       wasmDiag.tWorldMs =
         ((typeof performance !== 'undefined' ? performance.now() : Date.now()) as number) - t2
@@ -1236,13 +1344,13 @@ function createStore() {
         wasmDiag.tStart
       // Ensure WASM world's brain mode matches UI/store selection
       try {
-        if (typeof wasmWorld.set_brain_mode === 'function') {
+        if (wasmWorld && typeof wasmWorld.set_brain_mode === 'function') {
           wasmWorld.set_brain_mode(simulationParams.brainMode)
         }
       } catch (e) {
         console.warn('[WASM] set_brain_mode call failed during init', e)
       }
-      if (typeof wasmWorld.set_config === 'function') {
+      if (wasmWorld && typeof wasmWorld.set_config === 'function') {
         wasmWorld.set_config(buildWasmConfig())
       }
       return true
@@ -1258,14 +1366,14 @@ function createStore() {
   }
 
   async function initialize() {
-    const ok = await tryInitWasm()
+    await tryInitWasm()
     // Load Zegion spec for JS fallback sizing
     try {
       zegionSpec = await getZegionSpec()
       // initialize UI activation overrides from spec
       if (zegionSpec?.activations) {
-        const h = zegionSpec.activations.hidden as unknown as string | undefined
-        const o = zegionSpec.activations.output as unknown as string | undefined
+        const h = zegionSpec.activations.hidden
+        const o = zegionSpec.activations.output
         if (h && (activationNames as readonly string[]).includes(h)) {
           zegionActivations.hidden = h as ActivationName
         }
@@ -1322,9 +1430,9 @@ function createStore() {
         'corpseHumidityDecayCoeff',
         'corpseRainDecayCoeff',
         'corpseWetnessDecayCoeff',
-      ] as any
+      ] as Array<keyof typeof simulationParams>
       watch(
-        () => keys.map((k) => (simulationParams as any)[k]),
+        () => keys.map((k) => simulationParams[k]),
         () => {
           try {
             if (wasmWorld && typeof wasmWorld.set_config === 'function') {
@@ -1340,23 +1448,30 @@ function createStore() {
 
     // Load default bad brain hashes preferring dev API; fallback to public asset
     try {
-      let arr: any = null
+      let arr: string[] | null = null
       try {
         const apiRes = await fetch('/api/bad-brains', { cache: 'no-store' })
-        if (apiRes.ok) arr = await apiRes.json()
+        if (apiRes.ok) arr = (await apiRes.json()) as string[]
       } catch {}
       if (!Array.isArray(arr)) {
         try {
           const res = await fetch('/bad-brains.json', { cache: 'no-store' })
-          if (res.ok) arr = await res.json()
+          if (res.ok) arr = (await res.json()) as string[]
         } catch {}
       }
       if (Array.isArray(arr)) {
-        for (const h of arr) if (typeof h === 'string') badBrainHashes[h] = true
+        for (const h of arr) badBrainHashes[h] = true
         // Inform WASM of initial list
         syncBadBrainsToWasm()
       }
     } catch {}
+    // Seed the world and autostart the simulation on first load
+    // Ensures creatures/plants are visible and RAF begins without user interaction
+    try {
+      resetSimulation(true)
+    } catch (e) {
+      console.warn('[Sim] initialize() resetSimulation failed', e)
+    }
   }
 
   // Public: retry WASM initialization at runtime
@@ -1392,8 +1507,10 @@ function createStore() {
     rafHaltToken.value++
   }
 
-  // Module-scope helper to derive vision phenotype from genes or defaults
-  function computeVisionPhenotypeGlobal(genes: any, diet?: 'Herbivore' | 'Carnivore') {
+  function computeVisionPhenotypeGlobal(
+    genes: VisionGeneBag,
+    diet?: 'Herbivore' | 'Carnivore',
+  ) {
     // Choose diet-aware defaults if provided; else fall back to global sliders
     const isCarn = diet === 'Carnivore'
     const vrDefault = isCarn
@@ -1491,9 +1608,9 @@ function createStore() {
     // If WASM is available, rebuild state from it; else fall back to JS
     if (wasmWorld) {
       try {
-        const wc: any[] = wasmWorld.creatures_json?.() ?? []
-        const wp: any[] = wasmWorld.plants_json?.() ?? []
-        const wco: any[] = wasmWorld.corpses_json?.() ?? []
+        const wc: Array<Record<string, unknown>> = wasmWorld.creatures_json?.() ?? []
+        const wp: Array<Record<string, unknown>> = wasmWorld.plants_json?.() ?? []
+        const wco: Array<Record<string, unknown>> = wasmWorld.corpses_json?.() ?? []
         // If WASM did not seed a new population, seed it here and resync
         let newWc = wc
         let newWp = wp
@@ -1515,31 +1632,32 @@ function createStore() {
             newWp = wasmWorld.plants_json?.() ?? []
           }
         } catch {}
-        creatures.value = newWc.map((c: any) => {
-          const diet = c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore'
-          const visionBase = computeVisionPhenotypeGlobal(c.genes || {}, diet)
+        creatures.value = newWc.map((c: Record<string, unknown>) => {
+          const r = c || {}
+          const diet = r.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore'
+          const visionBase = computeVisionPhenotypeGlobal((r.genes as Record<string, unknown>) || {}, diet)
           const varied =
             generation.value === 1 && simulationParams.initialVarianceEnabled
               ? applyInitialVisionVariance(visionBase)
               : visionBase
           return {
-            id: c.id,
-            name: nameSvc.assignName(c.id, prevNames.get(c.id) || undefined),
-            x: c.x,
-            y: c.y,
-            vx: c.vx ?? 0,
-            vy: c.vy ?? 0,
-            energy: c.energy ?? 100,
+            id: String(r.id ?? crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)),
+            name: nameSvc.assignName(String(r.id ?? ''), prevNames.get(String(r.id ?? '')) || undefined),
+            x: Number(r.x ?? 0),
+            y: Number(r.y ?? 0),
+            vx: Number(r.vx ?? 0),
+            vy: Number(r.vy ?? 0),
+            energy: Number((r as Record<string, unknown>).energy ?? 100),
             thirst: 100,
             stamina: 100,
-            health: c.health ?? 100,
+            health: Number((r as Record<string, unknown>).health ?? 100),
             sDrive: 0,
             fear: 0,
-            lifespan: c.lifespan ?? 0,
+            lifespan: Number((r as Record<string, unknown>).lifespan ?? 0),
             isPregnant: false,
             gestationTimer: 0,
             childGenes: null,
-            genes: c.genes || {},
+            genes: (r.genes as Record<string, unknown>) || {},
             phenotype: {
               size: 1.0,
               speed: 2.0,
@@ -1549,46 +1667,60 @@ function createStore() {
               eyesCount: varied.eyesCount,
               eyeAnglesDeg: varied.eyeAnglesDeg,
             },
-            brain: c.brain
+            brain: (r as Record<string, unknown>).brain
               ? (() => {
-                  const ls = c.brain.layer_sizes ?? c.brain.layerSizes ?? [14, 8, 8]
-                  const acts = c.brain.activations ?? undefined
-                  const weights = c.brain.weights ?? undefined
-                  const biases = c.brain.biases ?? undefined
+                  const b = (r as Record<string, unknown>).brain as
+                    | (Record<string, unknown> & {
+                        layer_sizes?: number[]
+                        layerSizes?: number[]
+                        weights?: number[][]
+                        biases?: number[][]
+                        activations?: number[][]
+                      })
+                    | undefined
+                  const ls = (b?.layer_sizes ?? b?.layerSizes ?? [14, 8, 8]) as number[]
+                  const acts = (b?.activations ?? undefined) as number[][] | undefined
+                  const weights = (b?.weights ?? undefined) as number[][] | undefined
+                  const biases = (b?.biases ?? undefined) as number[][] | undefined
                   const output =
                     Array.isArray(acts) && acts.length > 0 ? acts[acts.length - 1] : undefined
                   return { layerSizes: ls, weights, biases, activations: acts, output }
                 })()
               : {
-                  layerSizes: computeLayerSizesForCreature(
-                    (generation.value === 1 && simulationParams.initialVarianceEnabled
-                      ? applyInitialVisionVariance(
-                          computeVisionPhenotypeGlobal(
-                            c.genes || {},
-                            diet,
-                          ),
-                        ).eyesCount
-                      : computeVisionPhenotypeGlobal(c.genes || {}, diet).eyesCount) as number,
-                  ),
+                  layerSizes: computeLayerSizesForCreature(),
                 },
-            radius: c.radius ?? 5,
+            radius: Number((r as Record<string, unknown>).radius ?? 5),
             maxStamina: 100,
             communicationColor: { r: 255, g: 180, b: 255 },
             isResting: false,
             isSprinting: false,
           } as Creature
         })
-        plants.value = newWp.map((p: any) => ({ x: p.x, y: p.y, radius: p.radius }))
-        corpses.value = (wco ?? []).map((co: any) => ({
-          x: co.x,
-          y: co.y,
-          radius: co.radius,
-          energyRemaining: co.energy_remaining ?? 0,
-          initialDecayTime: co.initial_decay_time ?? 100,
-          decayTimer: co.decay_timer ?? 100,
-        }))
-      } catch (e) {
-        console.warn('Failed to initialize from WASM, using JS fallback', e)
+        plants.value = newWp.map((p: Record<string, unknown>) => {
+          const pr = p || {}
+          return {
+            x: Number(pr.x ?? 0),
+            y: Number(pr.y ?? 0),
+            radius: Number((pr as Record<string, unknown>).radius ?? 3),
+          }
+        })
+        corpses.value = (wco ?? []).map((co: Record<string, unknown>) => {
+          const cr = co || {}
+          return {
+            x: Number(cr.x ?? 0),
+            y: Number(cr.y ?? 0),
+            radius: Number((cr as Record<string, unknown>).radius ?? 3),
+            energyRemaining: Number(
+              (cr as Record<string, unknown>).energy_remaining ??
+                (cr as Record<string, unknown>).energy ??
+                0,
+            ),
+            initialDecayTime: Number((cr as Record<string, unknown>).initial_decay_time ?? 100),
+            decayTimer: Number((cr as Record<string, unknown>).decay_timer ?? 100),
+          }
+        })
+      } catch {
+        console.warn('Failed to initialize from WASM, using JS fallback')
         initJsFallback()
       }
     } else {
@@ -1644,7 +1776,7 @@ function createStore() {
     for (let i = 0; i < simulationParams.initialCreatures; i++) {
       const x = Math.random() * 2000
       const y = Math.random() * 2000
-      const genes: any = { eyesCount: 2 }
+      const genes: Record<string, [string, string]> = {}
       // Choose diet first so vision defaults can be diet-aware
       const diet = Math.random() > 0.8 ? 'Carnivore' : 'Herbivore'
       // Base phenotype from defaults/genes, then apply configurable initial variance
@@ -1682,7 +1814,7 @@ function createStore() {
           eyesCount: vision.eyesCount,
           eyeAnglesDeg: vision.eyeAnglesDeg,
         },
-        brain: createGoodBrain(computeLayerSizesForCreature(vision.eyesCount), rngBrain),
+        brain: createGoodBrain(computeLayerSizesForCreature(), rngBrain),
         radius: 5,
         maxStamina: 100,
         communicationColor: { r: 255, g: 180, b: 255 },
@@ -1714,138 +1846,122 @@ function createStore() {
       console.debug('[Sim] Substeps', { steps, effDt: Number(effDt.toFixed(4)) })
     }
 
-    // Reset parity stats at the start of this frame (top-level update call)
-    try {
-      parityStats.env.mismatches = 0
-      parityStats.env.maxRelDiff = 0
-      for (const k of Object.keys(parityStats.env.compMaxRel)) parityStats.env.compMaxRel[k] = 0
-      parityStats.corpse.mismatches = 0
-      parityStats.corpse.maxRelDiff = 0
-      for (const k of Object.keys(parityStats.corpse.compMaxRel))
-        parityStats.corpse.compMaxRel[k] = 0
-    } catch {}
+    // Parity diagnostics throttle
+    const checkEvery = Math.max(1, Number(simulationParams.parityCheckEvery) || 1)
+    const doParity = (parityFrame++ % checkEvery) === 0
+
+    // Reset parity stats only on throttled frames
+    if (doParity) {
+      try {
+        parityStats.env.mismatches = 0
+        parityStats.env.maxRelDiff = 0
+        for (const k of Object.keys(parityStats.env.compMaxRel)) parityStats.env.compMaxRel[k] = 0
+        parityStats.corpse.mismatches = 0
+        parityStats.corpse.maxRelDiff = 0
+        for (const k of Object.keys(parityStats.corpse.compMaxRel)) parityStats.corpse.compMaxRel[k] = 0
+      } catch (e) {
+        console.warn('Failed to reset parity stats', e)
+      }
+    }
 
     for (let stepIdx = 0; stepIdx < steps; stepIdx++) {
       if (wasmWorld) {
         // Advance the WASM world and merge positional data into our creatures
         try {
-          wasmWorld.step(effDt)
-          const wasmCreatures: Array<any> = wasmWorld.creatures_json()
+          if (wasmWorld?.step) wasmWorld.step(effDt)
+          // Local structural types for WASM JSON payloads (creature type removed if unused)
+          type WasmEnvCost = {
+            id: string
+            envTotal?: number
+            envSwim?: number
+            envWind?: number
+            envCold?: number
+            envHeat?: number
+            envHumid?: number
+            envOxy?: number
+            envNoise?: number
+            envDisease?: number
+            locomotion?: number
+          }
+          type WasmCorpseCost = {
+            id: string
+            total?: number
+            base?: number
+            temp?: number
+            humid?: number
+            rain?: number
+            wet?: number
+          }
+
+          if (!wasmWorld) return
+          const ww = wasmWorld as WasmWorld
+          const wasmCreaturesRaw: Array<Record<string, unknown>> = ww.creatures_json()
           // Pull minimal environmental cost telemetry from WASM (optional method)
-          const wasmEnvCosts: Array<any> =
-            typeof wasmWorld.env_costs_json === 'function' ? wasmWorld.env_costs_json() : []
-          const envById = new Map<string, any>(
-            Array.isArray(wasmEnvCosts) ? wasmEnvCosts.map((e: any) => [e.id, e]) : [],
+          const wasmEnvCosts: WasmEnvCost[] =
+            typeof wasmWorld.env_costs_json === 'function' ? (wasmWorld.env_costs_json() as WasmEnvCost[]) : []
+          const envById = new Map<string, WasmEnvCost>(
+            Array.isArray(wasmEnvCosts) ? wasmEnvCosts.map((e: WasmEnvCost) => [e.id, e]) : [],
           )
           // Detect deaths by diffing previous vs new IDs
           const prevById = new Map<string, Creature>()
           for (const c of creatures.value) prevById.set(c.id, c)
-          const wasmPlants: Array<any> = wasmWorld.plants_json()
-          const wasmCorpses: Array<any> =
+          // Build nextCreatures from unknown-safe WASM JSON
+          const nextCreatures: Creature[] = wasmCreaturesRaw.map((wc: Record<string, unknown>): Creature => {
+            const wr = wc || {}
+            const id = String(wr.id ?? crypto.randomUUID?.() ?? Math.random().toString(36).slice(2))
+            const diet: 'Herbivore' | 'Carnivore' = wr.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore'
+            const genes = (wr.genes ?? {}) as VisionGeneBag
+            const vp = computeVisionPhenotypeGlobal(genes, diet)
+            return {
+              id,
+              name: nameSvc.assignName(id),
+              x: Number(wr.x ?? 0),
+              y: Number(wr.y ?? 0),
+              vx: Number(wr.vx ?? 0),
+              vy: Number(wr.vy ?? 0),
+              energy: Number((wr as Record<string, unknown>).energy ?? 100),
+              thirst: Number((wr as Record<string, unknown>).thirst ?? 100),
+              stamina: Number((wr as Record<string, unknown>).stamina ?? 100),
+              health: Number((wr as Record<string, unknown>).health ?? 100),
+              sDrive: 0,
+              fear: 0,
+              lifespan: Number((wr as Record<string, unknown>).lifespan ?? 0),
+              isPregnant: false,
+              gestationTimer: 0,
+              childGenes: null,
+              genes,
+              phenotype: {
+                size: 1.0,
+                speed: 2.0,
+                diet,
+                sightRange: vp.sightRange,
+                fieldOfViewDeg: vp.fieldOfViewDeg,
+                eyesCount: vp.eyesCount,
+                eyeAnglesDeg: vp.eyeAnglesDeg,
+              },
+            } as Creature
+          })
+          // Plants and corpses
+          const wasmPlantsRaw: Array<Record<string, unknown>> = ww.plants_json()
+          const wasmCorpsesRaw: Array<Record<string, unknown>> =
             typeof wasmWorld.corpses_json === 'function' ? wasmWorld.corpses_json() : []
-          // Optional corpse decay telemetry
-          const wasmCorpseCosts: Array<any> =
-            typeof (wasmWorld as any).corpse_costs_json === 'function'
-              ? (wasmWorld as any).corpse_costs_json()
-              : []
-          // Rebuild creatures list from WASM output (drop dead, add new), preserving names where possible
-          const nameById = new Map<string, string>()
-          for (const c of creatures.value) nameById.set(c.id, c.name)
-          const nextCreatures = wasmCreatures.map((wc: any, idx: number) => ({
-            id: wc.id,
-            name: nameById.get(wc.id) || `Creature-${idx}`,
-            x: wc.x,
-            y: wc.y,
-            vx: wc.vx,
-            vy: wc.vy,
-            energy: wc.energy ?? 100,
-            thirst: wc.thirst ?? 100,
-            stamina: wc.stamina ?? 100,
-            health: wc.health ?? 100,
-            sDrive: 0,
-            fear: 0,
-            lifespan: wc.lifespan ?? 0,
-            isPregnant: false,
-            gestationTimer: 0,
-            childGenes: null,
-            genes: wc.genes || {},
-            actionsMask: wc.actions_mask ?? 0,
-            feelingsMask: wc.feelings_mask ?? 0,
-            stagnantTicks: wc.stagnant_ticks ?? 0,
-            // Inject last-tick env cost telemetry for overlay/parity validation (if available)
-            ...(envById.has(wc.id)
-              ? {
-                  _lastCost: {
-                    envTotal: envById.get(wc.id)!.envTotal ?? 0,
-                    envSwim: envById.get(wc.id)!.envSwim ?? 0,
-                    envWind: envById.get(wc.id)!.envWind ?? 0,
-                    envCold: envById.get(wc.id)!.envCold ?? 0,
-                    envHeat: envById.get(wc.id)!.envHeat ?? 0,
-                    envHumid: envById.get(wc.id)!.envHumid ?? 0,
-                    envOxy: envById.get(wc.id)!.envOxy ?? 0,
-                    envNoise: envById.get(wc.id)!.envNoise ?? 0,
-                    envDisease: envById.get(wc.id)!.envDisease ?? 0,
-                    locomotion: envById.get(wc.id)!.locomotion ?? 0,
-                  },
-                }
-              : {}),
-            phenotype: {
-              size: 1.0,
-              speed: 2.0,
-              diet: wc.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-              sightRange: computeVisionPhenotypeGlobal(
-                wc.genes || {},
-                wc.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-              ).sightRange,
-              fieldOfViewDeg: computeVisionPhenotypeGlobal(
-                wc.genes || {},
-                wc.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-              ).fieldOfViewDeg,
-              eyesCount: computeVisionPhenotypeGlobal(
-                wc.genes || {},
-                wc.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-              ).eyesCount,
-              eyeAnglesDeg: computeVisionPhenotypeGlobal(
-                wc.genes || {},
-                wc.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-              ).eyeAnglesDeg,
-            },
-            brain: wc.brain
-              ? (() => {
-                  const ls = wc.brain.layer_sizes ?? wc.brain.layerSizes ?? [14, 8, 8]
-                  const acts = wc.brain.activations ?? undefined
-                  const weights = wc.brain.weights ?? undefined
-                  const biases = wc.brain.biases ?? undefined
-                  const output =
-                    Array.isArray(acts) && acts.length > 0 ? acts[acts.length - 1] : undefined
-                  return { layerSizes: ls, weights, biases, activations: acts, output }
-                })()
-              : {
-                  layerSizes: computeLayerSizesForCreature(
-                    computeVisionPhenotypeGlobal(
-                      wc.genes || {},
-                      wc.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-                    ).eyesCount,
-                  ),
-                },
-            radius: wc.radius ?? 5,
-            maxStamina: wc.max_stamina ?? 100,
-            communicationColor: { r: 255, g: 180, b: 255 },
-            isResting: false,
-            isSprinting: false,
-          }))
           // Update HoF and brain cache for those that disappeared
           try {
             const aliveIds = new Set(nextCreatures.map((c) => c.id))
             for (const [pid, prev] of prevById.entries()) {
               if (!aliveIds.has(pid)) {
                 // Prepare brain JSON for hashing and caching
-                const brainJSON =
-                  prev.brain && typeof prev.brain === 'object'
+                type BrainJSON = { layerSizes: number[]; weights: number[][]; biases: number[][] }
+                const b = prev.brain
+                const brainJSON: BrainJSON | null =
+                  b &&
+                  Array.isArray(b.layerSizes) &&
+                  Array.isArray(b.weights) &&
+                  Array.isArray(b.biases)
                     ? {
-                        layerSizes: (prev.brain as any).layerSizes,
-                        weights: (prev.brain as any).weights,
-                        biases: (prev.brain as any).biases,
+                        layerSizes: b.layerSizes as number[],
+                        weights: b.weights as number[][],
+                        biases: b.biases as number[][],
                       }
                     : null
                 const hofId = brainJSON ? simpleHash(JSON.stringify(brainJSON)) : String(prev.id)
@@ -1875,19 +1991,40 @@ function createStore() {
                     brainCache[h] = {
                       score: prev.lifespan,
                       brain: brainJSON,
-                      genes: (prev as any).genes || {},
+                      genes: prev.genes || {},
                     }
                   }
                 }
               }
             }
           } catch {}
-          creatures.value = nextCreatures
+          // In-place reconcile creatures to avoid replacing the reactive array each frame
+          {
+            const cur = creatures.value
+            const curById = new Map<string, Creature>()
+            for (const c of cur) curById.set(c.id, c)
+            const seen = new Set<string>()
+            for (const nc of nextCreatures) {
+              const ex = curById.get(nc.id)
+              if (ex) {
+                // Shallow merge to update fields while preserving refs used by Vue/renderer
+                Object.assign(ex, nc)
+              } else {
+                cur.push(nc)
+              }
+              seen.add(nc.id)
+            }
+            // Remove creatures that disappeared
+            for (let i = cur.length - 1; i >= 0; i--) {
+              if (!seen.has(cur[i].id)) cur.splice(i, 1)
+            }
+          }
           // Debug parity check: ensure envTotal ~= sum of components from WASM telemetry
           if (
             simulationParams.enableCostTelemetry &&
-            (simulationParams as any).debugLogging &&
-            envById.size
+            simulationParams.debugLogging &&
+            envById.size &&
+            doParity
           ) {
             const sample = nextCreatures.slice(0, 5)
             // Local accumulators for this frame (written back to parityStats after checks)
@@ -2042,39 +2179,114 @@ function createStore() {
             parityStats.env.maxRelDiff = envMaxRel
             for (const k of Object.keys(envCompMax)) parityStats.env.compMaxRel[k] = envCompMax[k]
           }
-          // sync plants
-          plants.value = wasmPlants.map((p: any) => ({ x: p.x, y: p.y, radius: p.radius }))
+          // sync plants (index-based in-place updates)
+          {
+            const pv = plants.value
+            const n = wasmPlantsRaw.length
+            const m = Math.min(pv.length, n)
+            for (let i = 0; i < m; i++) {
+              const p = wasmPlantsRaw[i]
+              const tgt = pv[i]
+              tgt.x = Number(p.x ?? 0)
+              tgt.y = Number(p.y ?? 0)
+              tgt.radius = Number((p as Record<string, unknown>).radius ?? 3)
+            }
+            if (n > pv.length) {
+              for (let i = pv.length; i < n; i++) {
+                const p = wasmPlantsRaw[i]
+                pv.push({
+                  x: Number(p.x ?? 0),
+                  y: Number(p.y ?? 0),
+                  radius: Number((p as Record<string, unknown>).radius ?? 3),
+                })
+              }
+            } else if (n < pv.length) {
+              pv.splice(n)
+            }
+          }
           // sync corpses and attach telemetry when available
-          const corpseCosts = Array.isArray(wasmCorpseCosts) ? wasmCorpseCosts : []
-          const ccByIndex = new Map<number, any>(corpseCosts.map((v: any, i: number) => [i, v]))
-          corpses.value = (wasmCorpses ?? []).map((co: any, i: number) => ({
-            x: co.x,
-            y: co.y,
-            radius: co.radius,
-            energyRemaining: co.energy_remaining ?? 0,
-            initialDecayTime: co.initial_decay_time ?? 100,
-            decayTimer: co.decay_timer ?? 100,
-            ...(ccByIndex.has(i)
-              ? {
-                  _lastDecay: {
-                    total: ccByIndex.get(i)!.total ?? 0,
-                    base: ccByIndex.get(i)!.base ?? 0,
-                    temp: ccByIndex.get(i)!.temp ?? 0,
-                    humid: ccByIndex.get(i)!.humid ?? 0,
-                    rain: ccByIndex.get(i)!.rain ?? 0,
-                    wet: ccByIndex.get(i)!.wet ?? 0,
-                  },
+          const corpseCostsRaw: unknown[] =
+            typeof (wasmWorld as unknown as { corpse_costs_json?: () => unknown[] }).corpse_costs_json === 'function'
+              ? ((wasmWorld as unknown as { corpse_costs_json: () => unknown[] }).corpse_costs_json() as unknown[])
+              : []
+          const corpseCosts = Array.isArray(corpseCostsRaw)
+            ? (corpseCostsRaw as unknown as WasmCorpseCost[])
+            : []
+          const ccByIndex = new Map<number, WasmCorpseCost>(
+            corpseCosts.map((v: WasmCorpseCost, i: number) => [i, v]),
+          )
+          // sync corpses (index-based in-place updates)
+          {
+            const cv = corpses.value
+            const n = wasmCorpsesRaw.length
+            const m = Math.min(cv.length, n)
+            for (let i = 0; i < m; i++) {
+              const c = wasmCorpsesRaw[i] || {}
+              const tgt = cv[i] as unknown as Record<string, unknown>
+              ;(tgt as { x: number }).x = Number(c.x ?? 0)
+              ;(tgt as { y: number }).y = Number(c.y ?? 0)
+              ;(tgt as { radius: number }).radius = Number(c.radius ?? 3)
+              ;(tgt as { energyRemaining: number }).energyRemaining = Number(
+                (c as Record<string, unknown>).energy_remaining ??
+                  (c as Record<string, unknown>).energy ??
+                  0,
+              )
+              ;(tgt as { initialDecayTime: number }).initialDecayTime = Number(
+                (c as Record<string, unknown>).initial_decay_time ?? 100,
+              )
+              ;(tgt as { decayTimer: number }).decayTimer = Number(
+                (c as Record<string, unknown>).decay_timer ?? 100,
+              )
+              if (ccByIndex.has(i)) {
+                ;(tgt as { _lastDecay?: Record<string, number> })._lastDecay = {
+                  total: ccByIndex.get(i)!.total ?? 0,
+                  base: ccByIndex.get(i)!.base ?? 0,
+                  temp: ccByIndex.get(i)!.temp ?? 0,
+                  humid: ccByIndex.get(i)!.humid ?? 0,
+                  rain: ccByIndex.get(i)!.rain ?? 0,
+                  wet: ccByIndex.get(i)!.wet ?? 0,
                 }
-              : {}),
-          }))
-          // Validator: ensure corpse total ~= sum of components
+              }
+            }
+            if (n > cv.length) {
+              for (let i = cv.length; i < n; i++) {
+                const c = wasmCorpsesRaw[i] || {}
+                cv.push({
+                  x: Number(c.x ?? 0),
+                  y: Number(c.y ?? 0),
+                  radius: Number(c.radius ?? 3),
+                  energyRemaining: Number(
+                    (c as Record<string, unknown>).energy_remaining ??
+                      (c as Record<string, unknown>).energy ??
+                      0,
+                  ),
+                  initialDecayTime: Number((c as Record<string, unknown>).initial_decay_time ?? 100),
+                  decayTimer: Number((c as Record<string, unknown>).decay_timer ?? 100),
+                  ...(ccByIndex.has(i)
+                    ? {
+                        _lastDecay: {
+                          total: ccByIndex.get(i)!.total ?? 0,
+                          base: ccByIndex.get(i)!.base ?? 0,
+                          temp: ccByIndex.get(i)!.temp ?? 0,
+                          humid: ccByIndex.get(i)!.humid ?? 0,
+                          rain: ccByIndex.get(i)!.rain ?? 0,
+                          wet: ccByIndex.get(i)!.wet ?? 0,
+                        },
+                      }
+                    : {}),
+                })
+              }
+            } else if (n < cv.length) {
+              cv.splice(n)
+            }
+          }
+          // Corpse parity diagnostics (throttled)
           if (
+            doParity &&
             simulationParams.enableCostTelemetry &&
-            (simulationParams as any).debugLogging &&
-            ccByIndex.size
+            simulationParams.debugLogging &&
+            corpseCosts.length
           ) {
-            const sampleCount = Math.min(5, corpseCosts.length)
-            // Local accumulators
             let corpseMismatchCount = 0
             let corpseMaxRel = 0
             const corpseCompMax: Record<string, number> = {
@@ -2085,11 +2297,17 @@ function createStore() {
               wet: 0,
               total: 0,
             }
-            for (let i = 0; i < sampleCount; i++) {
+            // Validate WASM parts sum against total
+            for (let i = 0; i < Math.min(5, corpseCosts.length); i++) {
               const w = corpseCosts[i]
-              const parts = [w.base ?? 0, w.temp ?? 0, w.humid ?? 0, w.rain ?? 0, w.wet ?? 0].map(
-                Number,
-              )
+              if (!w) continue
+              const parts = [
+                Number(w.base ?? 0),
+                Number(w.temp ?? 0),
+                Number(w.humid ?? 0),
+                Number(w.rain ?? 0),
+                Number(w.wet ?? 0),
+              ]
               const sum = parts.reduce((a, b) => a + (Number.isFinite(b) ? b : 0), 0)
               const total = Number(w.total ?? 0)
               const absDiff = Math.abs(sum - total)
@@ -2107,23 +2325,15 @@ function createStore() {
                   sum,
                   absDiff: Number(absDiff.toFixed(6)),
                   relDiff: Number(relDiff.toFixed(6)),
-                  parts: {
-                    base: parts[0],
-                    temp: parts[1],
-                    humid: parts[2],
-                    rain: parts[3],
-                    wet: parts[4],
-                  },
                 })
                 corpseMismatchCount++
                 corpseMaxRel = Math.max(corpseMaxRel, Number.isFinite(relDiff) ? relDiff : 0)
               }
             }
-            // JS recomputation validator mirroring Rust corpse decay formulas
-            // rate = base + base*(coeff*scalar) ... with temp term clamped to [0,2]
+            // JS recomputation mirror of Rust formulas
             for (let i = 0; i < Math.min(5, corpseCosts.length); i++) {
               const w = corpseCosts[i]
-              const co = (wasmCorpses ?? [])[i]
+              const co = (wasmCorpsesRaw ?? [])[i]
               if (!w || !co) continue
               const wx = Number(co.x) || 0
               const wy = Number(co.y) || 0
@@ -2133,15 +2343,13 @@ function createStore() {
               const tempTerm = Math.max(0, Math.min(2, ((wthr.temperatureC ?? 0) - 20) / 15))
               const jTemp = base * (Number(simulationParams.corpseTempDecayCoeff) || 0) * tempTerm
               const jHumid =
-                base *
-                (Number(simulationParams.corpseHumidityDecayCoeff) || 0) *
-                Math.max(0, wthr.humidity01 ?? 0)
-              const rain01 = (wthr as any).rain01 ?? (wthr as any).precipitation01 ?? 0
-              const wet01 = (terr as any).wet01 ?? (terr as any).wetness01 ?? 0
-              const jRain =
-                base * (Number(simulationParams.corpseRainDecayCoeff) || 0) * Math.max(0, rain01)
-              const jWet =
-                base * (Number(simulationParams.corpseWetnessDecayCoeff) || 0) * Math.max(0, wet01)
+                base * (Number(simulationParams.corpseHumidityDecayCoeff) || 0) * Math.max(0, wthr.humidity01 ?? 0)
+              const wthrCast = wthr as { rain01?: number; precipitation01?: number }
+              const terrCast = terr as { wet01?: number; wetness01?: number }
+              const rain01 = wthrCast.rain01 ?? wthrCast.precipitation01 ?? 0
+              const wet01 = terrCast.wet01 ?? terrCast.wetness01 ?? 0
+              const jRain = base * (Number(simulationParams.corpseRainDecayCoeff) || 0) * Math.max(0, rain01)
+              const jWet = base * (Number(simulationParams.corpseWetnessDecayCoeff) || 0) * Math.max(0, wet01)
               const jTotal = Math.max(0, base + jTemp + jHumid + jRain + jWet)
               const comps: Array<[string, number, number]> = [
                 ['base', Number(w.base ?? 0), base],
@@ -2154,8 +2362,7 @@ function createStore() {
               const ctRel = 0.01
               for (const [name, wv, jv] of comps) {
                 const diff = Math.abs(wv - jv)
-                const rel =
-                  Math.max(Math.abs(wv), 1e-6) > 0 ? diff / Math.max(Math.abs(wv), 1e-6) : diff
+                const rel = Math.max(Math.abs(wv), 1e-6) > 0 ? diff / Math.max(Math.abs(wv), 1e-6) : diff
                 if (diff > ctAbs && rel > ctRel) {
                   console.debug('[WASM CorpseDecay JS-Recompute]', {
                     index: i,
@@ -2168,11 +2375,9 @@ function createStore() {
                   corpseMismatchCount++
                 }
                 corpseMaxRel = Math.max(corpseMaxRel, Number.isFinite(rel) ? rel : 0)
-                if (corpseCompMax[name] !== undefined)
-                  corpseCompMax[name] = Math.max(
-                    corpseCompMax[name],
-                    Number.isFinite(rel) ? rel : 0,
-                  )
+                if (corpseCompMax[name] !== undefined) {
+                  corpseCompMax[name] = Math.max(corpseCompMax[name], Number.isFinite(rel) ? rel : 0)
+                }
               }
               const tw = Number(w.total ?? 0)
               const td = Math.abs(tw - jTotal)
@@ -2190,11 +2395,10 @@ function createStore() {
               corpseMaxRel = Math.max(corpseMaxRel, Number.isFinite(tr) ? tr : 0)
               corpseCompMax.total = Math.max(corpseCompMax.total, Number.isFinite(tr) ? tr : 0)
             }
-            // Write back corpse parity accumulators
+            // Write back accumulators
             parityStats.corpse.mismatches = corpseMismatchCount
             parityStats.corpse.maxRelDiff = corpseMaxRel
-            for (const k of Object.keys(corpseCompMax))
-              parityStats.corpse.compMaxRel[k] = corpseCompMax[k]
+            for (const k of Object.keys(corpseCompMax)) parityStats.corpse.compMaxRel[k] = corpseCompMax[k]
           }
           // Lightweight proximity events (WASM path lacks intent signals)
           try {
@@ -2485,39 +2689,32 @@ function createStore() {
       }
       const prevFlagsById: Map<string, PrevFlags> = new Map()
       for (const c of creatures.value) {
+        const cf = c as Creature & CreatureEventFlags
         prevFlagsById.set(c.id, {
-          thirsty: (c as any)._ev_prev_thirsty || false,
-          hungry: (c as any)._ev_prev_hungry || false,
-          fatigued: (c as any)._ev_prev_fatigued || false,
-          fearful: (c as any)._ev_prev_fearful || false,
-          inMatingUrge: (c as any)._ev_prev_mating || false,
-          restless: (c as any)._ev_prev_restless || false,
-          nearPlant: (c as any)._ev_prev_nearPlant || false,
-          nearFoodPlant: (c as any)._ev_prev_nearFoodPlant || false,
-          nearCorpse: (c as any)._ev_prev_nearCorpse || false,
-          nearMate: (c as any)._ev_prev_nearMate || false,
-          sprinting: (c as any)._ev_prev_sprinting || false,
-          resting: (c as any)._ev_prev_resting || false,
-          drinking: (c as any)._ev_prev_drinking || false,
-          prevHealth: (c as any)._ev_prev_health ?? c.health,
-          prevEnergy: (c as any)._ev_prev_energy ?? c.energy,
-          prevStamina: (c as any)._ev_prev_stamina ?? c.stamina,
+          thirsty: cf._ev_prev_thirsty || false,
+          hungry: cf._ev_prev_hungry || false,
+          fatigued: cf._ev_prev_fatigued || false,
+          fearful: cf._ev_prev_fearful || false,
+          inMatingUrge: cf._ev_prev_mating || false,
+          restless: cf._ev_prev_restless || false,
+          nearPlant: cf._ev_prev_nearPlant || false,
+          nearFoodPlant: cf._ev_prev_nearFoodPlant || false,
+          nearCorpse: cf._ev_prev_nearCorpse || false,
+          nearMate: cf._ev_prev_nearMate || false,
+          sprinting: cf._ev_prev_sprinting || false,
+          resting: cf._ev_prev_resting || false,
+          drinking: cf._ev_prev_drinking || false,
+          prevHealth: cf._ev_prev_health ?? c.health,
+          prevEnergy: cf._ev_prev_energy ?? c.energy,
         })
       }
       for (const c of creatures.value) {
         if (!c.brain || !c.brain.layerSizes || !c.brain.weights) {
-          const eyes = computeVisionPhenotypeGlobal(
-            c.genes || {},
-            c.phenotype?.diet || 'Herbivore',
-          ).eyesCount
-          const sizes = computeLayerSizesForCreature(eyes)
+          const sizes = computeLayerSizesForCreature()
           c.brain = createGoodBrain((c.brain?.layerSizes as number[]) || sizes, rngBrain)
         } else {
-          // Auto-resize if eyesCount changed since brain was created
-          const eyesNow =
-            Number(c.phenotype?.eyesCount) ||
-            computeVisionPhenotypeGlobal(c.genes || {}, c.phenotype?.diet || 'Herbivore').eyesCount
-          const desired = computeLayerSizesForCreature(eyesNow)
+          // Auto-resize if architecture changed due to mode/config
+          const desired = computeLayerSizesForCreature()
           if (Array.isArray(c.brain.layerSizes) && c.brain.layerSizes[0] !== desired[0]) {
             c.brain = createGoodBrain(desired, rngBrain)
           }
@@ -2531,10 +2728,10 @@ function createStore() {
           simulationParams.brainMode,
         )
         // Expose current inputs for UI/diagnostics
-        ;(c as any).brain.inputs = inputs.slice()
-        const actFns = resolveActivationFns(simulationParams.brainMode)
+        if (c.brain) c.brain.inputs = inputs.slice()
+        const actFns = resolveActivationFns()
         const { output, activations } = brainForward(
-          c.brain,
+          c.brain!,
           inputs,
           simulationParams.brainMode,
           actFns,
@@ -2594,7 +2791,7 @@ function createStore() {
         // Eat behavior: trickle energy when near a plant (herbivore) or corpse (carnivore)
         const wantsEat = eatSig > 0.5
         if (wantsEat) {
-          const diet = (c.phenotype?.diet as any) || 'Herbivore'
+          const diet: 'Herbivore' | 'Carnivore' = c.phenotype?.diet || 'Herbivore'
           if (diet === 'Herbivore' && nearPlant) c.energy = Math.min(100, c.energy + 0.15)
           else if (diet === 'Carnivore' && nearCorpse) c.energy = Math.min(100, c.energy + 0.12)
         }
@@ -2608,22 +2805,23 @@ function createStore() {
         else if (c.y < 0) c.y = height
         // --- Per-tick Cost Aggregation ---
         // Track previous velocity to estimate turning and acceleration
-        const prevVx = (c as any)._prevVx ?? c.vx
-        const prevVy = (c as any)._prevVy ?? c.vy
-        const prevHeading = (c as any)._prevHeading ?? Math.atan2(prevVy, prevVx)
+        const ce = c as Creature & CreatureEventFlags
+        const prevVx = ce._prevVx ?? c.vx
+        const prevVy = ce._prevVy ?? c.vy
+        const prevHeading = ce._prevHeading ?? Math.atan2(prevVy, prevVx)
         const speedNow = Math.hypot(c.vx, c.vy)
         const headingNow = speedNow > 1e-3 ? Math.atan2(c.vy, c.vx) : prevHeading
         const dHead = speedNow > 1e-3 ? Math.abs(wrapAngle(headingNow - prevHeading)) / effDt : 0
         const accelMag = Math.hypot((c.vx - prevVx) / effDt, (c.vy - prevVy) / effDt)
-        ;(c as any)._prevVx = c.vx
-        ;(c as any)._prevVy = c.vy
-        ;(c as any)._prevHeading = headingNow
+        ;(c as Creature & CreatureEventFlags)._prevVx = c.vx
+        ;(c as Creature & CreatureEventFlags)._prevVy = c.vy
+        ;(c as Creature & CreatureEventFlags)._prevHeading = headingNow
 
         let Eout = 0
         let Sout = 0
         // Basal metabolism
         Eout += simulationParams.baseMetabolicCostPerSec
-        const ph = c.phenotype || ({} as any)
+        const ph = c.phenotype
         const brainNeurons = Array.isArray(c.brain?.layerSizes)
           ? (c.brain!.layerSizes as number[]).reduce((a, b) => a + b, 0)
           : 0
@@ -2740,7 +2938,8 @@ function createStore() {
         let drinkE = 0
         let harvestE = 0
         let scavengeE = 0
-        const diet = (c.phenotype?.diet as any) || 'Herbivore'
+        const diet: 'Herbivore' | 'Carnivore' =
+          c.phenotype?.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore'
         if (wantsEat) {
           if (diet === 'Herbivore' && nearPlant) {
             harvestE += simulationParams.harvestPlantActionCostPerSecond
@@ -2767,10 +2966,7 @@ function createStore() {
 
         // Gestation per-second costs while pregnant
         if (c.isPregnant) {
-          const offspringCount =
-            (c as any).childGenes && Array.isArray((c as any).childGenes)
-              ? (c as any).childGenes.length
-              : 1
+          const offspringCount = Array.isArray(c.childGenes) ? c.childGenes.length : 1
           gestationE +=
             simulationParams.gestationBaseCostPerSec +
             simulationParams.gestationCostPerOffspringPerSec * Math.max(1, offspringCount)
@@ -2780,9 +2976,12 @@ function createStore() {
             // Birth event cost
             c.energy = Math.max(-50, c.energy - (simulationParams.birthEventCostEnergy || 0))
             // Apply mutation cost if childGenes differ from parent genes
-            if ((c as any).childGenes) {
+            if (c.childGenes) {
               try {
-                chargeMutationCost(c, c.genes, (c as any).childGenes)
+                const afterGenes: Record<string, unknown> = Array.isArray(c.childGenes)
+                  ? ((c.childGenes[0] as unknown) as Record<string, unknown>)
+                  : ((c.childGenes as unknown) as Record<string, unknown>)
+                chargeMutationCost(c, (c.genes as unknown) as Record<string, unknown>, afterGenes)
               } catch {}
             }
             // Emit event
@@ -2795,7 +2994,7 @@ function createStore() {
             // Reset pregnancy state (offspring spawning handled elsewhere if needed)
             c.isPregnant = false
             c.gestationTimer = 0
-            ;(c as any).childGenes = null
+            ;(c as { childGenes: unknown | null }).childGenes = null
           }
         }
 
@@ -2868,7 +3067,7 @@ function createStore() {
 
         // Optional cost telemetry
         if (simulationParams.enableCostTelemetry) {
-          ;(c as any)._lastCost = {
+          ;(c as CreatureWithDiag)._lastCost = {
             totalEnergyPerSec: Eout,
             locomotion,
             sprintOverflowE,
@@ -2904,7 +3103,7 @@ function createStore() {
               label: 'Feels thirsty',
             })
           }
-          ;(c as any)._ev_prev_thirsty = thirstyNow
+          ;(c as CreatureWithDiag)._ev_prev_thirsty = thirstyNow
 
           // Feeling: hunger (energy < 30)
           const hungryNow = (c.energy ?? 100) < simulationParams.hungerEnergyThreshold
@@ -2916,7 +3115,7 @@ function createStore() {
               label: 'Feels hungry',
             })
           }
-          ;(c as any)._ev_prev_hungry = hungryNow
+          ;(c as CreatureWithDiag)._ev_prev_hungry = hungryNow
 
           // Feeling: fatigue (stamina < 30)
           const fatiguedNow = (c.stamina ?? 100) < simulationParams.fatigueStaminaThreshold
@@ -2928,7 +3127,7 @@ function createStore() {
               label: 'Feels fatigued',
             })
           }
-          ;(c as any)._ev_prev_fatigued = fatiguedNow
+          ;(c as CreatureWithDiag)._ev_prev_fatigued = fatiguedNow
 
           // Feeling: fear (fear > 60)
           const fearfulNow = (c.fear ?? 0) > simulationParams.fearThreshold
@@ -2940,7 +3139,7 @@ function createStore() {
               label: 'Feels afraid',
             })
           }
-          ;(c as any)._ev_prev_fearful = fearfulNow
+          ;(c as CreatureWithDiag)._ev_prev_fearful = fearfulNow
 
           // Feeling: mating_urge (sDrive > 60)
           const matingNow = (c.sDrive ?? 0) > simulationParams.matingUrgeThreshold
@@ -2952,7 +3151,7 @@ function createStore() {
               label: 'Feels mating urge',
             })
           }
-          ;(c as any)._ev_prev_mating = matingNow
+          ;(c as CreatureWithDiag)._ev_prev_mating = matingNow
 
           // Feeling: pain (health drop this frame)
           const prevHealth = prev.prevHealth ?? c.health
@@ -2964,7 +3163,7 @@ function createStore() {
               label: 'Feels pain',
             })
           }
-          ;(c as any)._ev_prev_health = c.health
+          ;(c as CreatureWithDiag)._ev_prev_health = c.health
 
           // Resource change events (JS path)
           const prevEnergy = prev.prevEnergy ?? c.energy ?? 0
@@ -3036,8 +3235,8 @@ function createStore() {
               label: `Health ${dhJs.toFixed(1)}`,
             })
           }
-          ;(c as any)._ev_prev_energy = c.energy
-          ;(c as any)._ev_prev_stamina = c.stamina
+          ;(c as CreatureWithDiag)._ev_prev_energy = c.energy
+          ;(c as CreatureWithDiag)._ev_prev_stamina = c.stamina
 
           // Event: finds water (near plant)
           const nearPlant = plants.value.some(
@@ -3059,7 +3258,7 @@ function createStore() {
               label: 'Loses water source',
             })
           }
-          ;(c as any)._ev_prev_nearPlant = nearPlant
+          ;(c as CreatureWithDiag)._ev_prev_nearPlant = nearPlant
 
           // Event: finds/loses food plant (reuse plant proximity)
           const nearFoodPlant = nearPlant
@@ -3079,7 +3278,7 @@ function createStore() {
               label: 'Loses food plant',
             })
           }
-          ;(c as any)._ev_prev_nearFoodPlant = nearFoodPlant
+          ;(c as CreatureWithDiag)._ev_prev_nearFoodPlant = nearFoodPlant
 
           // Event: finds corpse
           const nearCorpse = corpses.value.some(
@@ -3115,7 +3314,7 @@ function createStore() {
                 const plantArr = plants.value
                 let bestIdx = -1
                 let bestD = Infinity
-                let bestP: any = null
+                let bestP: Plant | null = null
                 for (let i = 0; i < plantArr.length; i++) {
                   const p = plantArr[i]
                   const d = Math.hypot(p.x - c.x, p.y - c.y)
@@ -3125,7 +3324,7 @@ function createStore() {
                     bestIdx = i
                   }
                 }
-                const eatTol = Math.max(4, c.radius + (bestP?.radius || 3) + 2)
+                const eatTol = Math.max(4, c.radius + ((bestP?.radius ?? 3)) + 2)
                 if (bestIdx >= 0 && bestD <= eatTol) {
                   // Confirmed consume within tolerance
                   pushCreatureEvent(c.id, {
@@ -3143,7 +3342,7 @@ function createStore() {
                   if (typeof window !== 'undefined') {
                     // TEMP probe: confirm dispatch of action-notice
                     try {
-                      // eslint-disable-next-line no-console
+
                       console.log('[ActionNotice][probe][dispatch] about to dispatch', {
                         type: 'eats_plant', x: eaten.x, y: eaten.y, by: c.id,
                       })
@@ -3197,7 +3396,7 @@ function createStore() {
               label: 'Loses potential mate',
             })
           }
-          ;(c as any)._ev_prev_nearMate = nearMate
+          ;(c as CreatureWithDiag)._ev_prev_nearMate = nearMate
 
           // Heuristic: notable health drop while predator near => gets_hit
           if (
@@ -3231,7 +3430,7 @@ function createStore() {
               label: 'Stops sprinting',
             })
           }
-          ;(c as any)._ev_prev_sprinting = !!wantsBoost
+          ;(c as CreatureWithDiag)._ev_prev_sprinting = !!wantsBoost
 
           if (wantsRest && !prev.resting) {
             pushCreatureEvent(c.id, {
@@ -3241,14 +3440,14 @@ function createStore() {
               label: 'Rests',
             })
           }
-          ;(c as any)._ev_prev_resting = !!wantsRest
+          ;(c as CreatureWithDiag)._ev_prev_resting = !!wantsRest
 
           // Feeling: restless (ticks since last rest > 600 and currently not resting)
-          const sinceRest = ((c as any)._ev_ticks_since_rest || 0) + 1
+          const sinceRest = ((c as CreatureWithDiag)._ev_ticks_since_rest || 0) + 1
           if (wantsRest) {
-            ;(c as any)._ev_ticks_since_rest = 0
+            ;(c as CreatureWithDiag)._ev_ticks_since_rest = 0
           } else {
-            ;(c as any)._ev_ticks_since_rest = sinceRest
+            ;(c as CreatureWithDiag)._ev_ticks_since_rest = sinceRest
           }
           const restlessNow = !wantsRest && sinceRest > simulationParams.restlessTicks
           if (restlessNow && !prev.restless) {
@@ -3259,7 +3458,9 @@ function createStore() {
               label: 'Feels restless',
             })
           }
-          ;(c as any)._ev_prev_restless = restlessNow
+          // Use typed event flags intersection to record state
+          const cf = c as CreatureWithDiag
+          cf._ev_prev_restless = restlessNow
 
           const drinkingNow = wantsEat && nearPlant
           if (drinkingNow && !prev.drinking) {
@@ -3270,7 +3471,7 @@ function createStore() {
               label: 'Drinks',
             })
           }
-          ;(c as any)._ev_prev_drinking = drinkingNow
+          ;(c as CreatureWithDiag)._ev_prev_drinking = drinkingNow
         } catch {}
 
         // Death check -> create corpse and skip adding to next list
@@ -3300,16 +3501,16 @@ function createStore() {
                 brainCache[h] = { score: c.lifespan, brain: brainJSON, genes: c.genes || {} }
               }
             }
-          } catch (e) {
+          } catch {
             // non-fatal
           }
           // Add to per-generation Hall of Fame using stable brain hash when available
           const hofBrainJSON =
             c.brain && typeof c.brain === 'object'
               ? {
-                  layerSizes: (c.brain as any).layerSizes,
-                  weights: (c.brain as any).weights,
-                  biases: (c.brain as any).biases,
+                  layerSizes: (c.brain as BrainData).layerSizes,
+                  weights: (c.brain as BrainData).weights,
+                  biases: (c.brain as BrainData).biases,
                 }
               : null
           const hofIdNow = hofBrainJSON ? simpleHash(JSON.stringify(hofBrainJSON)) : String(c.id)
@@ -3338,8 +3539,10 @@ function createStore() {
           continue
         }
         // store activations and output for possible UI usage
-        ;(c as any).brain.activations = activations
-        ;(c as any).brain.output = output
+        if (c.brain) {
+          c.brain.activations = activations
+          c.brain.output = output
+        }
         nextCreatures.push(c)
       }
       creatures.value = nextCreatures
@@ -3435,7 +3638,7 @@ function createStore() {
     }
 
     // Optional camera follow
-    if ((simulationParams as any).followSelected && selectedCreatureId.value) {
+    if (simulationParams.followSelected && selectedCreatureId.value) {
       const c = creatures.value.find((cc) => cc.id === selectedCreatureId.value)
       if (c) {
         centerCameraOn(c.x, c.y)
@@ -3471,7 +3674,7 @@ function createStore() {
       const maxY = 2000 - visibleHalfHeight
       camera.y = Math.min(Math.max(camera.y, minY), maxY)
     }
-    // eslint-disable-next-line no-console
+
     try {
       const uiPrefs = useUiPrefs()
       if (uiPrefs.isLogOn?.('camera'))
@@ -3490,7 +3693,7 @@ function createStore() {
     camera.x = x
     camera.y = y
     clampCameraToWorld()
-    // eslint-disable-next-line no-console
+
     try {
       const uiPrefs = useUiPrefs()
       if (uiPrefs.isLogOn?.('camera'))
@@ -3504,7 +3707,7 @@ function createStore() {
     camera.x -= dx / camera.zoom
     camera.y += dy / camera.zoom
     clampCameraToWorld()
-    // eslint-disable-next-line no-console
+
     try {
       const uiPrefs = useUiPrefs()
       if (uiPrefs.isLogOn?.('camera'))
@@ -3560,49 +3763,74 @@ function createStore() {
         wasmWorld.spawn_creature(posX, posY)
         telemetry.totals.births++
         // Resync from WASM for immediate consistency
-        const wc: any[] = wasmWorld.creatures_json()
+        type WasmCreatureJson = {
+          id: string
+          x: number
+          y: number
+          vx: number
+          vy: number
+          energy?: number
+          health?: number
+          lifespan?: number
+          diet?: 'Herbivore' | 'Carnivore' | string
+          radius?: number
+          brain?: {
+            layer_sizes?: number[]
+            layerSizes?: number[]
+            weights?: number[][]
+            biases?: number[][]
+          } | null
+        }
+        if (!wasmWorld) return
+        const ww2 = wasmWorld as WasmWorld
+        const wcUnknown: unknown[] = ww2.creatures_json() as unknown[]
         const nameById = new Map<string, string>()
         for (const c of creatures.value) nameById.set(c.id, c.name)
-        creatures.value = wc.map((c: any, idx: number) => ({
-          id: c.id,
-          name: nameSvc.assignName(c.id, nameById.get(c.id) || undefined),
-          x: c.x,
-          y: c.y,
-          vx: c.vx,
-          vy: c.vy,
-          energy: c.energy ?? 100,
-          thirst: 100,
-          stamina: 100,
-          health: c.health ?? 100,
-          sDrive: 0,
-          fear: 0,
-          lifespan: c.lifespan ?? 0,
-          isPregnant: false,
-          gestationTimer: 0,
-          childGenes: null,
-          genes: {},
-          phenotype: {
-            size: 1.0,
-            speed: 2.0,
-            diet: c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore',
-          },
-          brain: c.brain
-            ? (() => {
-                const ls = c.brain.layer_sizes ?? c.brain.layerSizes ?? [14, 8, 8]
-                const acts = c.brain.activations ?? undefined
-                const weights = c.brain.weights ?? undefined
-                const biases = c.brain.biases ?? undefined
-                const output =
-                  Array.isArray(acts) && acts.length > 0 ? acts[acts.length - 1] : undefined
-                return { layerSizes: ls, weights, biases, activations: acts, output }
-              })()
-            : { layerSizes: [14, 8, 8] },
-          radius: c.radius ?? 5,
-          maxStamina: 100,
-          communicationColor: { r: 255, g: 180, b: 255 },
-          isResting: false,
-          isSprinting: false,
-        }))
+        creatures.value = wcUnknown.map((raw: unknown) => {
+          const c = (raw as WasmCreatureJson) || ({} as WasmCreatureJson)
+          const id = String(c.id ?? crypto.randomUUID?.() ?? Math.random().toString(36).slice(2))
+          return {
+            id,
+            name: nameSvc.assignName(id, nameById.get(id) || undefined),
+            x: Number(c.x ?? 0),
+            y: Number(c.y ?? 0),
+            vx: Number(c.vx ?? 0),
+            vy: Number(c.vy ?? 0),
+            energy: Number(c.energy ?? 100),
+            thirst: 100,
+            stamina: 100,
+            health: Number(c.health ?? 100),
+            sDrive: 0,
+            fear: 0,
+            lifespan: Number(c.lifespan ?? 0),
+            isPregnant: false,
+            gestationTimer: 0,
+            childGenes: null,
+            genes: {},
+            phenotype: {
+              size: 1.0,
+              speed: 2.0,
+              diet: (c.diet === 'Carnivore' ? 'Carnivore' : 'Herbivore') as 'Carnivore' | 'Herbivore',
+            },
+            brain: c.brain
+              ? (() => {
+                  const ls = c.brain!.layer_sizes ?? c.brain!.layerSizes
+                  const weights = c.brain!.weights
+                  const biases = c.brain!.biases
+                  return {
+                    layerSizes: Array.isArray(ls) ? (ls as number[]) : [14, 8, 8],
+                    weights: Array.isArray(weights) ? (weights as number[][]) : [],
+                    biases: Array.isArray(biases) ? (biases as number[][]) : [],
+                  }
+                })()
+              : null,
+            radius: typeof c.radius === 'number' ? c.radius : 5,
+            maxStamina: 100,
+            communicationColor: { r: 255, g: 180, b: 255 },
+            isResting: false,
+            isSprinting: false,
+          }
+        })
         return
       } catch (e) {
         console.warn('[WASM] spawn_creature failed; falling back to JS add', e)
@@ -3634,7 +3862,7 @@ function createStore() {
         speed: 2.0,
         diet: Math.random() > 0.8 ? 'Carnivore' : 'Herbivore',
       },
-      brain: { layerSizes: [14, 8, 8] },
+      brain: null,
       radius: 5,
       maxStamina: 100,
       communicationColor: { r: 255, g: 180, b: 255 },
@@ -3651,8 +3879,12 @@ function createStore() {
       try {
         wasmWorld.spawn_plant(posX, posY, 3)
         // Resync plants from WASM
-        const wp: any[] = wasmWorld.plants_json()
-        plants.value = wp.map((p: any) => ({ x: p.x, y: p.y, radius: p.radius }))
+        const wp = (wasmWorld.plants_json() as unknown) as Array<{
+          x: number
+          y: number
+          radius: number
+        }>
+        plants.value = wp.map((p) => ({ x: p.x, y: p.y, radius: p.radius }))
         return
       } catch (e) {
         console.warn('[WASM] spawn_plant failed; falling back to JS add', e)
@@ -3717,7 +3949,7 @@ function createStore() {
       })
       // Schedule death to verify cleanup and death event path
       setTimeout(() => {
-        const cc = creatures.value.find((k: any) => k.id === id)
+        const cc = creatures.value.find((k: Creature) => k.id === id)
         if (cc) {
           // Push explicit death event for visibility, then apply health=0 to exercise cleanup path
           pushCreatureEventDebug(id, {
@@ -3796,6 +4028,17 @@ function createStore() {
 
   function setShowDebugOverlay(v: boolean) {
     simulationParams.showDebugOverlay = !!v
+  }
+
+  // Throttle setters
+  function setOverlayUpdateEvery(v: number) {
+    // Minimum 1 frame; clamp to integer
+    simulationParams.overlayUpdateEvery = Math.max(1, Math.round(Number(v)))
+  }
+
+  function setParityCheckEvery(v: number) {
+    // Minimum 1 frame; clamp to integer
+    simulationParams.parityCheckEvery = Math.max(1, Math.round(Number(v)))
   }
 
   function setVisionFovDeg(v: number) {
@@ -3901,13 +4144,13 @@ function createStore() {
   }
 
   // Cloud persistence: JSONBin
-  async function saveToJSONBin(): Promise<{ ok: boolean; binId?: string; error?: any }> {
+  async function saveToJSONBin(): Promise<{ ok: boolean; binId?: string; error?: unknown }> {
     try {
       // In dev, skip JSONBin entirely unless explicitly allowed
-      if ((import.meta as any).env?.DEV && !(import.meta as any).env?.VITE_ALLOW_JSONBIN_DEV) {
+      if (import.meta.env.DEV && !import.meta.env.VITE_ALLOW_JSONBIN_DEV) {
         return { ok: false, error: 'JSONBin disabled in dev' }
       }
-      const apiKey = (import.meta as any).env?.VITE_JSONBIN_KEY
+      const apiKey = import.meta.env.VITE_JSONBIN_KEY
       if (!apiKey) return { ok: false, error: 'Missing VITE_JSONBIN_KEY' }
       const snapshot = {
         creatures: creatures.value,
@@ -3927,7 +4170,7 @@ function createStore() {
       const res = await fetch(endpoint, { method, headers, body: JSON.stringify(snapshot) })
       if (!res.ok) {
         // Suppress noisy 401s in development when key is invalid
-        if (res.status === 401 && (import.meta as any).env?.DEV) {
+        if (res.status === 401 && import.meta.env?.DEV) {
           // Do not update binId or throw; just report as a soft failure
           return { ok: false, error: 'JSONBin unauthorized (dev suppressed)' }
         }
@@ -3939,8 +4182,8 @@ function createStore() {
       return { ok: true, binId: jsonBin.binId }
     } catch (e) {
       // Downgrade 401 noise in dev to debug; keep warn otherwise
-      const msg = String((e as any)?.message ?? e)
-      if (/401/.test(msg) && (import.meta as any).env?.DEV) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (/401/.test(msg) && import.meta.env.DEV) {
         console.debug('saveToJSONBin skipped (401 dev)', e)
       } else {
         console.warn('saveToJSONBin failed', e)
@@ -3949,15 +4192,15 @@ function createStore() {
     }
   }
 
-  async function loadFromJSONBin(binId?: string): Promise<{ ok: boolean; error?: any }> {
+  async function loadFromJSONBin(binId?: string): Promise<{ ok: boolean; error?: unknown }> {
     try {
       // In dev, skip JSONBin entirely unless explicitly allowed
-      if ((import.meta as any).env?.DEV && !(import.meta as any).env?.VITE_ALLOW_JSONBIN_DEV) {
+      if (import.meta.env.DEV && !import.meta.env.VITE_ALLOW_JSONBIN_DEV) {
         return { ok: false, error: 'JSONBin disabled in dev' }
       }
       const id = binId || jsonBin.binId
       if (!id) return { ok: false, error: 'Missing binId' }
-      const apiKey = (import.meta as any).env?.VITE_JSONBIN_KEY
+      const apiKey = import.meta.env.VITE_JSONBIN_KEY
       if (!apiKey) return { ok: false, error: 'Missing VITE_JSONBIN_KEY' }
       const headers: Record<string, string> = {
         'X-Master-Key': apiKey,
@@ -3976,9 +4219,9 @@ function createStore() {
   }
 
   // Helpers for local file fallback and generation snapshots
-  function saveJSONToLocalFile(obj: any, filename: string) {
+  function saveJSONToLocalFile(obj: unknown, filename: string) {
     try {
-      const dataStr = JSON.stringify(obj, null, 2)
+      const dataStr = JSON.stringify(obj as Record<string, unknown> | unknown[], null, 2)
       const blob = new Blob([dataStr], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -4009,7 +4252,7 @@ function createStore() {
     }
     // Optional: try JSONBin if configured; otherwise skip cloud save silently
     try {
-      const apiKey = (import.meta as any).env?.VITE_JSONBIN_KEY
+      const apiKey = import.meta.env.VITE_JSONBIN_KEY
       if (apiKey) {
         await saveToJSONBin()
       }
@@ -4025,13 +4268,13 @@ function createStore() {
   }
 
   // Read-only accessors for brain cache (for UI/devtools)
-  function getBrainCache(): Readonly<Record<string, { score: number; brain: any; genes: any }>> {
+  function getBrainCache(): Readonly<Record<string, { score: number; brain: unknown; genes: unknown }>> {
     return readonly(brainCache)
   }
 
   function getTopBrains(
     limit = 20,
-  ): Array<{ hash: string; score: number; brain: any; genes: any }> {
+  ): Array<{ hash: string; score: number; brain: unknown; genes: unknown }> {
     const entries = Object.entries(brainCache).map(([hash, v]) => ({ hash, ...v }))
     entries.sort((a, b) => b.score - a.score)
     return entries.slice(0, Math.max(0, limit))
@@ -4054,17 +4297,29 @@ function createStore() {
   }
 
   // Load a snapshot object into the current store state
-  function loadSnapshot(snapshot: any): boolean {
+  function loadSnapshot(snapshot: unknown): boolean {
     try {
       // Ensure we are not stepping while applying a snapshot
       isRunning.value = false
-      creatures.value = snapshot.creatures ?? []
-      plants.value = snapshot.plants ?? []
-      corpses.value = snapshot.corpses ?? []
-      if (snapshot.camera) Object.assign(camera, snapshot.camera)
-      if (snapshot.params) Object.assign(simulationParams, snapshot.params)
-      if (Array.isArray(snapshot.badBrainHashes)) {
-        for (const h of snapshot.badBrainHashes) if (typeof h === 'string') badBrainHashes[h] = true
+      const s = (snapshot as Record<string, unknown>) || {}
+      creatures.value = (s.creatures as Creature[]) ?? []
+      plants.value = (s.plants as Array<{ x: number; y: number; radius: number }>) ?? []
+      const rawCorpses = (s.corpses as unknown[]) ?? []
+      corpses.value = rawCorpses.map((rc: unknown) => {
+        const r = (rc as Record<string, unknown>) || {}
+        return {
+          x: Number(r.x ?? 0),
+          y: Number(r.y ?? 0),
+          radius: Number(r.radius ?? 3),
+          energyRemaining: Number((r as Record<string, unknown>).energyRemaining ?? 0),
+          initialDecayTime: Number((r as Record<string, unknown>).initialDecayTime ?? 100),
+          decayTimer: Number((r as Record<string, unknown>).decayTimer ?? 100),
+        }
+      })
+      if (s.camera) Object.assign(camera, s.camera as object)
+      if (s.params) Object.assign(simulationParams, s.params as object)
+      if (Array.isArray(s.badBrainHashes)) {
+        for (const h of s.badBrainHashes as unknown[]) if (typeof h === 'string') badBrainHashes[h] = true
       }
       // Sync merged hashes to WASM if supported
       syncBadBrainsToWasm()
@@ -4094,13 +4349,13 @@ function createStore() {
   }
 
   // Expose per-creature vision spec (safe defaults if missing)
-  function getVisionSpec(target?: string | any) {
-    let c: any | undefined
+  function getVisionSpec(target?: string | Creature) {
+    let c: Creature | undefined
     if (!target) c = creatures.value.find((x) => x.id === selectedCreatureId.value)
     else if (typeof target === 'string') c = creatures.value.find((x) => x.id === target)
     else c = target
-    const genes = c?.genes || {}
-    const ph = c?.phenotype || {}
+    const genes = (c?.genes as Record<string, unknown>) || {}
+    const ph = (c?.phenotype as Creature['phenotype']) || ({} as Creature['phenotype'])
     const computed = computeVisionPhenotypeGlobal(genes, ph?.diet || 'Herbivore')
     return {
       sightRange: Number(ph.sightRange) || computed.sightRange,
@@ -4168,6 +4423,8 @@ function createStore() {
     setFollowSelected,
     setInstanceUpdateEvery,
     setInstanceUpdateChunk,
+    setOverlayUpdateEvery,
+    setParityCheckEvery,
     setAdaptivePerfEnabled,
     setTargetFps,
     setSimulationSpeed,
@@ -4213,8 +4470,7 @@ function createStore() {
       // Re-init brains in JS fallback to apply immediately
       if (!wasmWorld) {
         for (const c of creatures.value) {
-          const eyes = Number(c.phenotype?.eyesCount) || 2
-          const sizes = computeLayerSizesForCreature(eyes)
+          const sizes = computeLayerSizesForCreature()
           c.brain = initBrain(sizes, rngBrain)
         }
       }
@@ -4236,7 +4492,7 @@ function createStore() {
     setSelectedCreature,
     getSelectedCreature,
     debugSpawnAndTrigger,
-    
+
     // Persistence
     saveSimulation,
     loadSimulation,

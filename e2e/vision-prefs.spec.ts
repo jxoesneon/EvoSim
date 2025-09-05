@@ -175,10 +175,10 @@ test.describe('Vision preferences persistence', () => {
     }, { timeout: 4000 })
     const fovVal = await page.getByTestId('settings-vision-fov').inputValue()
     const rangeVal = await page.getByTestId('settings-vision-range').inputValue()
-    const showChecked = await page.getByTestId('settings-vision-toggle').isChecked()
+    const showChecked = page.getByTestId('settings-vision-toggle')
     expect(Number(fovVal)).toBe(123)
     expect(Number(rangeVal)).toBe(77)
-    expect(showChecked).toBe(true)
+    await expect(showChecked).toBeChecked()
 
     // Assert no known error/warning logs appeared
     const logs: Array<{ type: string; text: string }> = await page.evaluate(() => {

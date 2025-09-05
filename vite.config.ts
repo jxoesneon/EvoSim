@@ -4,7 +4,7 @@ import { defineConfig, type ViteDevServer } from 'vite'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-type NextFunction = (err?: any) => void
+type NextFunction = (err?: unknown) => void
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
@@ -70,16 +70,20 @@ const badBrainsApi = () => ({
                 await writeFile(publicPath, out, 'utf-8')
                 res.setHeader('content-type', 'application/json')
                 res.end(JSON.stringify({ ok: true, added, size: set.size }))
-              } catch (e: any) {
+              } catch (e: unknown) {
                 res.statusCode = 400
                 res.setHeader('content-type', 'application/json')
-                res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }))
+                const msg =
+                  typeof e === 'object' && e !== null && 'message' in e
+                    ? String((e as { message?: unknown }).message)
+                    : String(e)
+                res.end(JSON.stringify({ ok: false, error: msg }))
               }
             })
             return
           }
           next()
-        } catch (e) {
+        } catch {
           next()
         }
       },

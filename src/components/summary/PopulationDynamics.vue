@@ -5,17 +5,23 @@ import { useUserPrefs } from '../../composables/useUserPrefs'
 import { useUiPrefs } from '../../composables/useUiPrefs'
 const UPlotStackedArea = defineAsyncComponent(() => import('./charts/UPlotStackedArea.vue'))
 
+type PopulationSeries = {
+  readonly creatures?: ReadonlyArray<number>
+  readonly plants?: ReadonlyArray<number>
+  readonly corpses?: ReadonlyArray<number>
+}
+
 const store = useSimulationStore()
-const pop = computed<any>(() => (store.telemetry as any)?.series?.population ?? {})
-const baseC = computed<number[]>(() => pop.value?.creatures ?? [])
-const baseP = computed<number[]>(() => pop.value?.plants ?? [])
-const baseCo = computed<number[]>(() => pop.value?.corpses ?? [])
+const pop = computed<PopulationSeries>(() => store.telemetry?.series?.population ?? {})
+const baseC = computed<number[]>(() => (pop.value.creatures ? Array.from(pop.value.creatures) : []))
+const baseP = computed<number[]>(() => (pop.value.plants ? Array.from(pop.value.plants) : []))
+const baseCo = computed<number[]>(() => (pop.value.corpses ? Array.from(pop.value.corpses) : []))
 
 // Empty-state fallback: if no series, use current live counts as a single sample
 const fallbackCounts = computed(() => ({
-  creatures: (((store as any)?.creatures as any)?.value?.length ?? 0) as number,
-  plants: (((store as any)?.plants as any)?.value?.length ?? 0) as number,
-  corpses: (((store as any)?.corpses as any)?.value?.length ?? 0) as number,
+  creatures: store.creatures?.value?.length ?? 0,
+  plants: store.plants?.value?.length ?? 0,
+  corpses: store.corpses?.value?.length ?? 0,
 }))
 
 function ensureSeries(arr: number[], fallback: number) {
@@ -28,16 +34,22 @@ function ensureSeries(arr: number[], fallback: number) {
 const { getPopulationDynamics, setPopulationDynamics } = useUiPrefs()
 const popPrefs = getPopulationDynamics()
 const hidden = ref<{ c: boolean; p: boolean; co: boolean }>(
-  (popPrefs?.hidden as any) ?? { c: false, p: false, co: false },
+  popPrefs?.hidden && typeof popPrefs.hidden === 'object'
+    ? {
+        c: !!(popPrefs.hidden as { c?: boolean }).c,
+        p: !!(popPrefs.hidden as { p?: boolean }).p,
+        co: !!(popPrefs.hidden as { co?: boolean }).co,
+      }
+    : { c: false, p: false, co: false },
 )
 
 // Smoothing
-const smoothing = ref<boolean>(
-  typeof popPrefs?.smoothing === 'boolean' ? popPrefs.smoothing : false,
-)
-const smoothWin = ref<5 | 9 | 13>((([5, 9, 13] as const).includes(popPrefs?.smoothWin as any)
-  ? (popPrefs?.smoothWin as any)
-  : 5) as 5 | 9 | 13)
+const smoothing = ref<boolean>(typeof popPrefs?.smoothing === 'boolean' ? popPrefs.smoothing : false)
+const allowedWins = [5, 9, 13] as const
+const initialWin = allowedWins.includes(popPrefs?.smoothWin as 5 | 9 | 13)
+  ? (popPrefs?.smoothWin as 5 | 9 | 13)
+  : 5
+const smoothWin = ref<5 | 9 | 13>(initialWin)
 function smooth(arr: number[], win: number) {
   if (!smoothing.value) return arr
   const n = arr.length
@@ -57,11 +69,11 @@ function smooth(arr: number[], win: number) {
 }
 
 // Zoom window selector (simple): full, last 1000, last 200
-const windowSel = ref<'full' | '1k' | '200'>(
-  (['full', '1k', '200'] as const).includes(popPrefs?.windowSel as any)
-    ? (popPrefs?.windowSel as any)
-    : 'full',
-)
+const allowedWindows = ['full', '1k', '200'] as const
+const initialWindow = allowedWindows.includes(popPrefs?.windowSel as 'full' | '1k' | '200')
+  ? (popPrefs?.windowSel as 'full' | '1k' | '200')
+  : 'full'
+const windowSel = ref<'full' | '1k' | '200'>(initialWindow)
 function sliceWindow(arr: number[]) {
   const n = arr.length
   if (windowSel.value === 'full') return arr
@@ -135,7 +147,7 @@ watch(data, (d) => {
 })
 
 // Exports for uPlot
-const areaRef = ref<any>(null)
+const areaRef = ref<unknown>(null)
 const { setLastExport, getLastExport, getPreferredExport, setPreferredExport } = useUserPrefs()
 const PREF_KEY = 'summary:population-dynamics'
 const lastFmt = computed(() => getLastExport(PREF_KEY))
@@ -168,8 +180,13 @@ function exportCsv() {
 }
 function downloadPng() {
   setLastExport(PREF_KEY, 'png')
-  const comp = areaRef.value as any
-  const root: HTMLElement | null = comp?.$el ?? comp ?? null
+  const comp = areaRef.value as unknown
+  let root: HTMLElement | null = null
+  if (comp && typeof comp === 'object') {
+    const maybeEl = (comp as { $el?: unknown }).$el
+    if (maybeEl instanceof HTMLElement) root = maybeEl
+    else if (comp instanceof HTMLElement) root = comp
+  }
   if (!root) return
   const canvas = root.querySelector('canvas') as HTMLCanvasElement | null
   if (!canvas) return
