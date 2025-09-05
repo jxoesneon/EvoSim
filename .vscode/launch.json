@@ -1,0 +1,87 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Vite: Dev Server (npm run dev)",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}",
+      "serverReadyAction": {
+        "pattern": "Local:   http://localhost:([0-9]+)/",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "type": "pwa-chrome",
+      "request": "launch",
+      "name": "Chrome: Vite App",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      "sourceMaps": true
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Vitest: All (debug)",
+      "runtimeExecutable": "node",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--inspect-brk",
+        "./node_modules/vitest/vitest.mjs",
+        "run",
+        "--no-threads"
+      ],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Vitest: Current File (debug)",
+      "runtimeExecutable": "node",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "--inspect-brk",
+        "./node_modules/vitest/vitest.mjs",
+        "run",
+        "--no-threads",
+        "${file}"
+      ],
+      "console": "integratedTerminal",
+      "autoAttachChildProcesses": true
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Playwright: UI",
+      "command": "npx playwright test --ui",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "CI": ""
+      }
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Vite: Preview Server (npm run preview)",
+      "command": "npm run preview",
+      "cwd": "${workspaceFolder}",
+      "serverReadyAction": {
+        "pattern": "Local:   http://localhost:([0-9]+)/",
+        "uriFormat": "http://localhost:%s",
+        "action": "openExternally"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Vite: Full (Dev Server + Chrome)",
+      "configurations": [
+        "Vite: Dev Server (npm run dev)",
+        "Chrome: Vite App"
+      ]
+    }
+  ]
+}

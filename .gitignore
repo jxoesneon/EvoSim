@@ -7,28 +7,61 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
-.DS_Store
+
+# Build outputs
 dist
 dist-ssr
-coverage
-*.local
 
+# Coverage
+coverage
+*.lcov
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Tool caches and temp
+.eslintcache
+*.tsbuildinfo
+.history/
+tmp/
+temp/
+
+# Legacy Cypress artifacts (not used, safe to ignore)
 /cypress/videos/
 /cypress/screenshots/
 
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+!.vscode/launch.json
 .idea
+*.iml
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-*.tsbuildinfo
-
+# Playwright
 test-results/
 playwright-report/
+blob-report/
+
+# Rust / WASM build artifacts
+src/wasm/**/target/
+src/wasm/**/pkg/
+src/wasm/**/.wasm-pack/
+
+# Misc
+*.local
 .idx/dev.nix
