@@ -2,16 +2,27 @@
 import { computed } from 'vue'
 import { useSimulationStore } from '../composables/useSimulationStore'
 
+type CreatureData = {
+  id: string
+  name?: string
+}
+
+type HallOfFameEntry = {
+  id: string
+  name?: string
+  liveId?: string
+}
+
 const store = useSimulationStore()
 
 // Hall of Fame from the store (cumulative, persists across generations)
 const topN = 10
 const hallOfFame = computed(() => store.getHallOfFameTopAll(topN))
 
-function displayName(entry: { id: string; name?: string; liveId?: string }) {
+function displayName(entry: HallOfFameEntry) {
   if (entry?.name) return entry.name
   const lid = entry?.liveId || entry?.id
-  const c = (store.creatures as any).value?.find((x: any) => x.id === lid)
+  const c = store.creatures.value?.find((x: CreatureData) => x.id === lid)
   return c?.name || `#${entry?.id}`
 }
 </script>

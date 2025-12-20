@@ -42,9 +42,9 @@ onMounted(() => {
   store.setVisionFovDeg?.(Number(fovDeg.value))
   store.setVisionRange?.(Number(visionRange.value))
   console.log('[Vision][CP] applied to store', {
-    storeShow: (store.simulationParams as any).showVisionCones,
-    storeFov: (store.simulationParams as any).visionFovDeg,
-    storeRange: (store.simulationParams as any).visionRange,
+    storeShow: store.simulationParams.showVisionCones,
+    storeFov: store.simulationParams.visionFovDeg,
+    storeRange: store.simulationParams.visionRange,
   })
 })
 
@@ -87,7 +87,10 @@ const defaultTypes = {
   vision: false,
   ui_prefs: false,
 }
-const logTypes = ref<Record<string, boolean>>({ ...defaultTypes, ...(prefs.getLogging?.().types || {}) })
+const logTypes = ref<Record<string, boolean>>({
+  ...defaultTypes,
+  ...(prefs.getLogging?.().types || {}),
+})
 function toggleLogsEnabled() {
   logEnabled.value = !logEnabled.value
   prefs.setLogging?.({ enabled: logEnabled.value })
@@ -95,7 +98,7 @@ function toggleLogsEnabled() {
 function toggleLogType(key: string) {
   const cur = !!logTypes.value[key]
   logTypes.value[key] = !cur
-  prefs.setLogging?.({ types: { [key]: !cur } as any })
+  prefs.setLogging?.({ types: { [key]: !cur } as Record<string, boolean> })
 }
 
 // Event/Feeling thresholds (compact controls)
@@ -128,11 +131,16 @@ const selHidden = ref<string>(store.zegionActivations.hidden)
 const selOutput = ref<string>(store.zegionActivations.output)
 function applyActivations() {
   // Types are validated in store
-  store.setZegionActivations(selHidden.value as any, selOutput.value as any)
+  store.setZegionActivations(selHidden.value, selOutput.value)
 }
 
 // Action Noticing controls
-const an = prefs.getActionNoticing?.() || { enabled: true, byAction: { eats_plant: true }, holdMs: 5000, zoom: 2 }
+const an = prefs.getActionNoticing?.() || {
+  enabled: true,
+  byAction: { eats_plant: true },
+  holdMs: 5000,
+  zoom: 2,
+}
 const anEnabled = ref<boolean>(!!an.enabled)
 const anEatsPlant = ref<boolean>(an.byAction?.eats_plant !== false)
 const anHoldMs = ref<number>(Number(an.holdMs) || 5000)
@@ -143,6 +151,30 @@ function applyActionNoticing() {
     byAction: { ...(an.byAction || {}), eats_plant: !!anEatsPlant.value },
     holdMs: Math.max(250, Number(anHoldMs.value) || 5000),
     zoom: Math.max(0.2, Number(anZoom.value) || 2),
+  })
+}
+
+// Weather controls (mode/updateHz/resolution/DPR cap)
+const w = prefs.getWeatherSettings?.() || {
+  mode: 'shader2d',
+  updateHz: 8,
+  resolution: 1024,
+  pixelRatioCap: 1.5,
+}
+const weatherMode = ref<'static' | 'shader2d' | 'volume3d'>(
+  w.mode as 'static' | 'shader2d' | 'volume3d',
+)
+const weatherHz = ref<number>(Number(w.updateHz) || 8)
+const weatherRes = ref<256 | 512 | 1024>(
+  ([256, 512, 1024].includes(w.resolution as number) ? w.resolution : 1024) as 256 | 512 | 1024,
+)
+const weatherDprCap = ref<number>(Number(w.pixelRatioCap) || 1.5)
+function applyWeather() {
+  prefs.setWeatherSettings?.({
+    mode: weatherMode.value,
+    updateHz: Math.max(0, Math.min(60, Number(weatherHz.value) || 0)),
+    resolution: weatherRes.value,
+    pixelRatioCap: Math.max(1, Math.min(2.5, Number(weatherDprCap.value) || 1.5)),
   })
 }
 
@@ -202,11 +234,21 @@ async function onFileChange(e: Event) {
       >
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm font-medium">Enabled</span>
-          <input type="checkbox" class="toggle toggle-xs" v-model="anEnabled" @change="applyActionNoticing" />
+          <input
+            type="checkbox"
+            class="toggle toggle-xs"
+            v-model="anEnabled"
+            @change="applyActionNoticing"
+          />
         </div>
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm">eats_plant</span>
-          <input type="checkbox" class="toggle toggle-xs" v-model="anEatsPlant" @change="applyActionNoticing" />
+          <input
+            type="checkbox"
+            class="toggle toggle-xs"
+            v-model="anEatsPlant"
+            @change="applyActionNoticing"
+          />
         </div>
         <div class="flex items-center justify-between mb-2">
           <span class="text-sm">Hold (ms)</span>
@@ -234,10 +276,88 @@ async function onFileChange(e: Event) {
       </div>
     </div>
 
+    <!-- Weather Controls -->
+    <div class="dropdown dropdown-bottom">
+      <label tabindex="0" class="btn btn-xs md:btn-sm btn-outline">⛅ Weather</label>
+      <div
+        tabindex="0"
+        class="dropdown-content z-[60] menu p-3 shadow bg-base-100 rounded-box w-80"
+      >
+        <div class="text-xs text-gray-600 mb-2">Mode</div>
+        <div class="btn-group mb-3">
+          <button
+            class="btn btn-ghost btn-xs"
+            :class="weatherMode === 'static' ? 'btn-active' : 'opacity-70'"
+            @click="
+              weatherMode = 'static'
+              applyWeather()
+            "
+          >
+            Static
+          </button>
+          <button
+            class="btn btn-ghost btn-xs"
+            :class="weatherMode === 'shader2d' ? 'btn-active' : 'opacity-70'"
+            @click="
+              weatherMode = 'shader2d'
+              applyWeather()
+            "
+          >
+            Shader 2D
+          </button>
+          <button
+            class="btn btn-ghost btn-xs"
+            :class="weatherMode === 'volume3d' ? 'btn-active' : 'opacity-70'"
+            @click="
+              weatherMode = 'volume3d'
+              applyWeather()
+            "
+          >
+            Volume 3D
+          </button>
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm">Update Hz</span>
+          <input
+            type="number"
+            min="0"
+            max="60"
+            step="1"
+            class="input input-2xs w-20"
+            v-model.number="weatherHz"
+            @change="applyWeather"
+          />
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-sm">Resolution</span>
+          <select class="select select-2xs w-24" v-model.number="weatherRes" @change="applyWeather">
+            <option :value="256">256</option>
+            <option :value="512">512</option>
+            <option :value="1024">1024</option>
+          </select>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-sm">DPR Cap</span>
+          <input
+            type="number"
+            min="1"
+            max="2.5"
+            step="0.1"
+            class="input input-2xs w-20"
+            v-model.number="weatherDprCap"
+            @change="applyWeather"
+          />
+        </div>
+      </div>
+    </div>
+
     <!-- Perf Throttles -->
     <div class="hidden md:flex items-center gap-2 pl-2 ml-1 border-l border-base-300">
       <span class="text-xs text-gray-600">Perf</span>
-      <label class="text-[10px] text-gray-600 flex items-center gap-1" title="Overlay update interval (frames)">
+      <label
+        class="text-[10px] text-gray-600 flex items-center gap-1"
+        title="Overlay update interval (frames)"
+      >
         <span>Overlay</span>
         <input
           v-model.number="overlayEvery"
@@ -247,7 +367,10 @@ async function onFileChange(e: Event) {
           class="input input-2xs w-16"
         />
       </label>
-      <label class="text-[10px] text-gray-600 flex items-center gap-1" title="Parity check interval (frames)">
+      <label
+        class="text-[10px] text-gray-600 flex items-center gap-1"
+        title="Parity check interval (frames)"
+      >
         <span>Parity</span>
         <input
           v-model.number="parityEvery"
@@ -502,10 +625,18 @@ async function onFileChange(e: Event) {
       <!-- Logs controls -->
       <div class="dropdown dropdown-bottom">
         <label tabindex="0" class="btn btn-xs md:btn-sm btn-outline">🧪 Logs</label>
-        <div tabindex="0" class="dropdown-content z-[60] menu p-3 shadow bg-base-100 rounded-box w-80">
+        <div
+          tabindex="0"
+          class="dropdown-content z-[60] menu p-3 shadow bg-base-100 rounded-box w-80"
+        >
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm font-medium">Enable all logs</span>
-            <input type="checkbox" class="toggle toggle-xs" :checked="logEnabled" @change="toggleLogsEnabled" />
+            <input
+              type="checkbox"
+              class="toggle toggle-xs"
+              :checked="logEnabled"
+              @change="toggleLogsEnabled"
+            />
           </div>
           <div class="text-xs text-gray-600 mb-1">Types</div>
           <div class="flex flex-wrap gap-2">
@@ -522,7 +653,5 @@ async function onFileChange(e: Event) {
         </div>
       </div>
     </div>
-
-    
   </div>
 </template>

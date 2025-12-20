@@ -1,13 +1,30 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue'
 import { useSimulationStore } from '../../composables/useSimulationStore'
+import type { EChartsOption } from 'echarts'
 import { useUserPrefs } from '../../composables/useUserPrefs'
 
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 const store = useSimulationStore()
 
-const totals = computed(() => (store.telemetry as any)?.totals ?? {})
-const events = computed(() => (store.telemetry as any)?.series?.events ?? {})
+type EventSeries = Partial<
+  Record<
+    'births' | 'deaths' | 'eats_plant' | 'eats_corpse' | 'drinks' | 'attacks' | 'gets_hit',
+    number[]
+  >
+>
+type TelemetryTotals = Partial<
+  Record<
+    'births' | 'deaths' | 'eats_plant' | 'eats_corpse' | 'drinks' | 'attacks' | 'gets_hit',
+    number
+  >
+>
+type EventsTelemetry = { totals?: TelemetryTotals; series?: { events?: EventSeries } }
+
+const totals = computed<TelemetryTotals>(() => (store.telemetry as EventsTelemetry)?.totals ?? {})
+const events = computed<EventSeries>(
+  () => (store.telemetry as EventsTelemetry)?.series?.events ?? {},
+)
 
 // Build per-interval rates from cumulative series
 function diff(arr: number[]): number[] {
@@ -34,8 +51,8 @@ const seriesDefs = [
   { key: 'gets_hit', name: 'Gets Hit' },
 ]
 
-const timelineOption = computed(() => {
-  const ev = events.value as any
+const timelineOption = computed<EChartsOption>(() => {
+  const ev = events.value
   const dataSeries = seriesDefs.map((s) => ({
     name: s.name,
     type: 'line',
@@ -55,7 +72,8 @@ const timelineOption = computed(() => {
 })
 
 // Exports
-const chartRef = ref<any>(null)
+type ChartExpose = { downloadPNG?: (filename?: string) => void }
+const chartRef = ref<ChartExpose | null>(null)
 const { setLastExport, getLastExport, getPreferredExport, setPreferredExport } = useUserPrefs()
 const PREF_KEY = 'summary:behavior-events'
 const lastFmt = computed(() => getLastExport(PREF_KEY))
@@ -77,7 +95,7 @@ function downloadText(filename: string, text: string) {
 
 function exportEventsCsv() {
   setLastExport(PREF_KEY, 'csv')
-  const ev = events.value as any
+  const ev = events.value
   const cols = ['tick', ...seriesDefs.map((s) => s.key)]
   const arrays: number[][] = seriesDefs.map((s) => diff(ev?.[s.key] ?? []))
   const n = Math.max(0, ...arrays.map((a) => a.length))
@@ -91,9 +109,7 @@ function exportEventsCsv() {
 
 function exportEventsPng() {
   setLastExport(PREF_KEY, 'png')
-  const inst = chartRef as any
-  // call the wrapper's downloadPNG if available
-  ;(inst as any)?.downloadPNG?.('behavior-events.png')
+  chartRef.value?.downloadPNG?.('behavior-events.png')
 }
 
 function exportUsingPreferred() {

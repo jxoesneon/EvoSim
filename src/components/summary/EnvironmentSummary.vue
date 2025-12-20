@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent } from 'vue'
-import { useSimulationStore } from '../../composables/useSimulationStore'
+import {
+  useSimulationStore,
+  type SimulationParams,
+  type TelemetrySeries,
+} from '../../composables/useSimulationStore'
 import { useUserPrefs } from '../../composables/useUserPrefs'
 // Emit inline edit requests so parent can focus Controls for specific param
 const emit = defineEmits<{
   (e: 'edit', key: 'plantSpawnRate' | 'waterLevel'): void
 }>()
 const store = useSimulationStore()
-const params = computed(() => store.simulationParams as any)
-const prevParams = computed<Record<string, any> | null>(() => (store as any).lastGenParams ?? null)
+const params = computed<SimulationParams>(() => store.simulationParams as SimulationParams)
+const prevParams = computed<Partial<SimulationParams> | null>(
+  () => (store as { lastGenParams?: Partial<SimulationParams> }).lastGenParams ?? null,
+)
 
 function fmtDelta(curr?: number, prev?: number) {
   if (typeof curr !== 'number' || typeof prev !== 'number') return null
@@ -29,9 +35,25 @@ const deltaWaterLevel = computed(() =>
 
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 import { ref } from 'vue'
-const chartTempRef = ref<any>(null)
-const chartUvRef = ref<any>(null)
-const envSeries = computed(() => ((store.telemetry as any)?.series?.environment ?? {}) as any)
+type ChartExpose = { downloadPNG?: (filename?: string) => void }
+type EnvSeries = TelemetrySeries & {
+  environment?: {
+    temperatureC?: number[]
+    humidity01?: number[]
+    precipitation01?: number[]
+    uv01?: number[]
+    visibility01?: number[]
+    windSpeed?: number[]
+  }
+}
+const chartTempRef = ref<ChartExpose | null>(null)
+const chartUvRef = ref<ChartExpose | null>(null)
+const envSeries = computed(
+  () =>
+    ((store.telemetry as EnvSeries)?.series?.environment ?? {}) as Required<
+      NonNullable<EnvSeries['environment']>
+    >,
+)
 const envX = computed<number[]>(() => {
   const t: number[] = envSeries.value?.temperatureC ?? []
   return t.map((_, i) => i)
@@ -44,10 +66,11 @@ const envOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      formatter: (params: any[]) => {
-        const lines = (params || []).map((p: any) => {
-          const name = p?.seriesName || ''
-          const v = Number(p?.value ?? 0)
+      formatter: (items) => {
+        const entries = Array.isArray(items) ? items : []
+        const lines = entries.map((p) => {
+          const name = (p as { seriesName?: string })?.seriesName || ''
+          const v = Number((p as { value?: number })?.value ?? 0)
           if (name.includes('Temp')) return `${name}: ${v.toFixed(1)} °C`
           return `${name}: ${v.toFixed(2)}`
         })
@@ -78,10 +101,11 @@ const envOption2 = computed(() => {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      formatter: (params: any[]) => {
-        const lines = (params || []).map((p: any) => {
-          const name = p?.seriesName || ''
-          const v = Number(p?.value ?? 0)
+      formatter: (items) => {
+        const entries = Array.isArray(items) ? items : []
+        const lines = entries.map((p) => {
+          const name = (p as { seriesName?: string })?.seriesName || ''
+          const v = Number((p as { value?: number })?.value ?? 0)
           if (name.includes('Wind')) return `${name}: ${v.toFixed(2)} m/s`
           return `${name}: ${v.toFixed(2)}`
         })
@@ -156,12 +180,12 @@ function exportUvCsv() {
 
 function exportTempPng() {
   setLastExport(PREF_TEMP, 'png')
-  ;(chartTempRef as any)?.downloadPNG?.('environment-temp.png')
+  chartTempRef.value?.downloadPNG?.('environment-temp.png')
 }
 
 function exportUvPng() {
   setLastExport(PREF_UV, 'png')
-  ;(chartUvRef as any)?.downloadPNG?.('environment-uv-wind.png')
+  chartUvRef.value?.downloadPNG?.('environment-uv-wind.png')
 }
 
 function exportTempUsingPreferred() {

@@ -29,7 +29,7 @@ function createService() {
       const url = `https://randomuser.me/api/?results=${count}&inc=name&nat=us,gb,ca,au,nz`
       const res = await fetch(url)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = (await res.json()) as any
+      const data = await res.json()
       const names: string[] = []
       for (const r of data?.results || []) {
         const f = r?.name?.first ? String(r.name.first) : ''
@@ -39,8 +39,8 @@ function createService() {
       }
       if (names.length > 0) state.queue.push(...names)
       state.lastError = null
-    } catch (e: any) {
-      state.lastError = e?.message || String(e)
+    } catch (e: unknown) {
+      state.lastError = (e as Error)?.message || String(e)
     } finally {
       state.fetching = false
     }
@@ -85,7 +85,18 @@ function createService() {
 }
 
 function fallbackName() {
-  const animals = ['Lynx', 'Otter', 'Wren', 'Pika', 'Yak', 'Civet', 'Ibex', 'Stoat', 'Tern', 'Quoll']
+  const animals = [
+    'Lynx',
+    'Otter',
+    'Wren',
+    'Pika',
+    'Yak',
+    'Civet',
+    'Ibex',
+    'Stoat',
+    'Tern',
+    'Quoll',
+  ]
   const adj = ['Swift', 'Bold', 'Quiet', 'Feral', 'Merry', 'Sly', 'Calm', 'Nimble', 'Brave', 'Wary']
   const a = animals[Math.floor(Math.random() * animals.length)]
   const b = adj[Math.floor(Math.random() * adj.length)]

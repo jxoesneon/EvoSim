@@ -1,30 +1,31 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, shallowRef, ref, watch, nextTick } from 'vue'
+import { onMounted, onBeforeUnmount, shallowRef, watch, ref, nextTick } from 'vue'
+import type UPlot from 'uplot'
+import type { Options as UPlotOptions, AlignedData } from 'uplot'
 
-// Props: data is [x[], y1[], y2[], ...]
 interface Props {
-  data: number[][]
-  colors?: string[]
-  fillOpacity?: number
-  epsilonFloor?: number
+  // uPlot expects data as [x[], y1[], y2[], ...]
+  data: AlignedData
+  options?: Partial<UPlotOptions>
   class?: string
 }
 const props = defineProps<Props>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
-const chart = shallowRef<any>(null)
-let uplotMod: any = null
+let uplotMod: typeof import('uplot') | null = null
+const chart = shallowRef<UPlot | null>(null)
 let ro: ResizeObserver | null = null
 let observedEl: Element | null = null
 let lastW = 0
 let lastH = 0
 let fixedH = 0
 
-function isValidData(d: any): d is number[][] {
+function isValidData(d: AlignedData): d is AlignedData {
   return (
     Array.isArray(d) &&
     d.length >= 2 &&
-    d.every((a) => Array.isArray(a)) &&
+    Array.isArray(d[0]) &&
+    Array.isArray(d[1]) &&
     d.every((a) => a.length === d[0].length)
   )
 }
@@ -60,48 +61,48 @@ function toRgba(hex: string, alpha: number): string {
 }
 
 async function createChart() {
-  if (!rootEl.value) return
+  if (!rootEl.value || !isValidData(props.data)) return
   if (chart.value) destroyChart()
   if (!uplotMod) uplotMod = await import('uplot')
-  const UPlot = uplotMod.default || uplotMod
+  const UPlotCtor = (uplotMod.default ?? uplotMod) as typeof UPlot
+  const size = rootEl.value.getBoundingClientRect()
+  const targetH = fixedH || Math.max(120, Math.floor(size.height || 240))
+  const baseOpts: UPlotOptions = {
+    width: Math.max(160, Math.floor(size.width || 400)),
+    height: targetH,
+    ...(props.options ?? {}),
+  }
 
-  const rect = rootEl.value.getBoundingClientRect()
-  const width = Math.max(100, Math.floor(rect.width || 400))
-  const height = Math.max(100, Math.floor(fixedH || rect.height || 220))
-
-  const dRaw = props.data || []
-  const d = makeCumulative(dRaw)
-
-  const yCount = isValidData(d) ? Math.max(0, d.length - 1) : 0
-  const palette = (
-    props.colors && props.colors.length
-      ? props.colors
-      : ['#60a5fa', '#fbbf24', '#34d399', '#f472b6']
-  ).slice(0, yCount)
-  const fill = Math.max(0, Math.min(1, props.fillOpacity ?? 0.3))
+  const palette: string[] = (props.options?.series ?? [])
+    .slice(1)
+    .map((s) =>
+      typeof s === 'object' && 'stroke' in s
+        ? (s as { stroke?: string }).stroke || '#0ea5e9'
+        : '#0ea5e9',
+    )
+  const fillAlpha = typeof props.options?.series?.[1]?.fill === 'string' ? 0.4 : 0.35
 
   const series = [
     {}, // x
     ...palette.map((c) => ({
       stroke: c,
       width: 1,
-      fill: toRgba(c, fill),
+      fill: toRgba(c, fillAlpha),
     })),
   ]
 
-  const opts = {
-    width,
-    height,
+  const opts: UPlotOptions = {
+    ...baseOpts,
     series,
-    axes: [{}, {}],
-    scales: { x: { time: false } },
+    axes: baseOpts.axes ?? [{}, {}],
+    scales: baseOpts.scales ?? { x: { time: false } },
   }
 
-  const initData = isValidData(d) ? d : [[], []]
-  chart.value = new UPlot(opts, initData, rootEl.value)
+  const initData = isValidData(props.data) ? props.data : [[], []]
+  chart.value = new UPlotCtor(opts, initData, rootEl.value)
 
-  lastW = width
-  lastH = height
+  lastW = opts.width ?? 0
+  lastH = opts.height ?? 0
 }
 
 function destroyChart() {

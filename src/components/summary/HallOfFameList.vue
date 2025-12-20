@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, defineEmits } from 'vue'
-import { useSimulationStore } from '../../composables/useSimulationStore'
+import { useSimulationStore, type Creature } from '../../composables/useSimulationStore'
 
 type HofEntry = {
   id: string
@@ -8,7 +8,6 @@ type HofEntry = {
   name?: string
   lifespan?: number
   gen?: number
-  [k: string]: any
 }
 const store = useSimulationStore()
 const emit = defineEmits<{
@@ -29,7 +28,7 @@ function colorFromId(id: string): string {
 
 function getAvatarColor(entry: HofEntry): string {
   const liveId = entry.liveId ?? entry.id
-  const c = (store.creatures as any).value?.find((x: any) => x.id === liveId)
+  const c = (store.creatures as { value?: Creature[] }).value?.find((x) => x.id === liveId)
   if (c?.communicationColor) {
     const { r, g, b } = c.communicationColor
     return `rgb(${r}, ${g}, ${b})`
@@ -43,7 +42,7 @@ function onFocus(entry: HofEntry) {
   try {
     if (store.setSelectedCreature) store.setSelectedCreature(liveId)
     // Try to center camera on current position if creature still exists
-    const c = (store.creatures as any).value?.find((x: any) => x.id === liveId)
+    const c = (store.creatures as { value?: Creature[] }).value?.find((x) => x.id === liveId)
     if (c && store.centerCameraOn) store.centerCameraOn(c.x, c.y)
   } finally {
     emit('focus', liveId)

@@ -9,6 +9,11 @@ type CreatureEvent = {
   label?: string
 }
 
+type CreatureData = {
+  id: string
+  name?: string
+}
+
 type Toast = {
   id: number
   text: string
@@ -29,7 +34,7 @@ const store = useSimulationStore()
 
 function resolveCreatureName(id: string): string {
   try {
-    const c = store.creatures.value.find((x: any) => x.id === id)
+    const c = store.creatures.value.find((x: CreatureData) => x.id === id)
     return c?.name || `#${id}`
   } catch {
     return `#${id}`

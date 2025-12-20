@@ -60,8 +60,8 @@ function computeCardWidth(retries = 8) {
     if (!root) return
     // If inside a hidden popup, defer until visible
     if (!isVisible(root)) {
-      if (retries > 0) {
-        clearTimeout(pendingRetry as any)
+      if (retries > 0 && typeof window !== 'undefined') {
+        clearTimeout(pendingRetry as number)
         pendingRetry = window.setTimeout(() => computeCardWidth(retries - 1), 80)
       }
       return

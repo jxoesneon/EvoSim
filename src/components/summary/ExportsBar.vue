@@ -14,7 +14,7 @@ async function exportPng() {
     const dataUrl = await mod.toPng(el, { pixelRatio: 2, quality: 0.95, skipFonts: true })
     const a = document.createElement('a')
     a.href = dataUrl
-    a.download = `generation-summary-gen${(store.generation as any).value}.png`
+    a.download = `generation-summary-gen${store.generation.value}.png`
     a.click()
   } catch (e) {
     console.warn('PNG export failed', e)
@@ -32,7 +32,7 @@ async function exportSvg() {
     const dataUrl = await mod.toSvg(el, { pixelRatio: 2, skipFonts: true })
     const a = document.createElement('a')
     a.href = dataUrl
-    a.download = `generation-summary-gen${(store.generation as any).value}.svg`
+    a.download = `generation-summary-gen${store.generation.value}.svg`
     a.click()
   } catch (e) {
     console.warn('SVG export failed', e)
@@ -44,15 +44,15 @@ async function exportSvg() {
 function exportJson() {
   try {
     const payload = {
-      generation: (store.generation as any).value,
-      lastGenEnd: (store.lastGenEnd as any).value,
+      generation: store.generation.value,
+      lastGenEnd: store.lastGenEnd.value,
       telemetry: store.telemetry,
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `generation-summary-gen${(store.generation as any).value}.json`
+    a.download = `generation-summary-gen${store.generation.value}.json`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (e) {
@@ -62,7 +62,7 @@ function exportJson() {
 
 function exportCsv() {
   try {
-    const t: any = store.telemetry as any
+    const t = store.telemetry
     const avg = t?.series?.avgSpeed ?? []
     const pc = t?.series?.population?.creatures ?? []
     const pp = t?.series?.population?.plants ?? []
@@ -79,7 +79,7 @@ function exportCsv() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `generation-summary-gen${(store.generation as any).value}.csv`
+    a.download = `generation-summary-gen${store.generation.value}.csv`
     a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   } catch (e) {
@@ -90,8 +90,8 @@ function exportCsv() {
 async function copySettings() {
   try {
     const payload = {
-      generation: (store.generation as any).value,
-      lastGenEnd: (store.lastGenEnd as any).value,
+      generation: store.generation.value,
+      lastGenEnd: store.lastGenEnd.value,
       params: store.simulationParams,
       notes: 'Copy of current generation summary settings and metadata',
       copiedAt: new Date().toISOString(),

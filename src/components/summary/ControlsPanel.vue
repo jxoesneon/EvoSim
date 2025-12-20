@@ -1,29 +1,41 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useSimulationStore } from '../../composables/useSimulationStore'
+
+type SimulationParams = {
+  mutationRate: number
+  mutationAmount: number
+  movementThreshold: number
+  stagnantTicksLimit: number
+  plantSpawnRate: number
+  waterLevel: number
+  // Add other params as needed for type safety
+  [key: string]: number | boolean | string
+}
+
 const store = useSimulationStore()
 const mutationRate = computed<number>({
-  get: () => (store.simulationParams as any).mutationRate,
+  get: () => (store.simulationParams as SimulationParams).mutationRate,
   set: (v) => store.setMutationRate?.(Number(v)),
 })
 const mutationAmount = computed<number>({
-  get: () => (store.simulationParams as any).mutationAmount,
+  get: () => (store.simulationParams as SimulationParams).mutationAmount,
   set: (v) => store.setMutationAmount?.(Number(v)),
 })
 const movementThreshold = computed<number>({
-  get: () => (store.simulationParams as any).movementThreshold,
+  get: () => (store.simulationParams as SimulationParams).movementThreshold,
   set: (v) => store.setMovementThreshold?.(Number(v)),
 })
 const stagnantTicksLimit = computed<number>({
-  get: () => (store.simulationParams as any).stagnantTicksLimit,
+  get: () => (store.simulationParams as SimulationParams).stagnantTicksLimit,
   set: (v) => store.setStagnantTicksLimit?.(Number(v)),
 })
 const plantSpawnRate = computed<number>({
-  get: () => (store.simulationParams as any).plantSpawnRate,
+  get: () => (store.simulationParams as SimulationParams).plantSpawnRate,
   set: (v) => store.setPlantSpawnRate?.(Number(v)),
 })
 const waterLevel = computed<number>({
-  get: () => (store.simulationParams as any).waterLevel,
+  get: () => (store.simulationParams as SimulationParams).waterLevel,
   set: (v) => store.setWaterLevel?.(Number(v)),
 })
 function startNext() {
@@ -74,10 +86,8 @@ function applyPreset(key: PresetKey) {
   if (typeof p.mutationAmount === 'number') store.setMutationAmount?.(p.mutationAmount)
   if (typeof p.plantSpawnRate === 'number') store.setPlantSpawnRate?.(p.plantSpawnRate)
   if (typeof p.waterLevel === 'number') store.setWaterLevel?.(p.waterLevel)
-  if (typeof p.movementThreshold === 'number')
-    store.setMovementThreshold?.(p.movementThreshold as number)
-  if (typeof p.stagnantTicksLimit === 'number')
-    store.setStagnantTicksLimit?.(p.stagnantTicksLimit as number)
+  if (typeof p.movementThreshold === 'number') store.setMovementThreshold?.(p.movementThreshold)
+  if (typeof p.stagnantTicksLimit === 'number') store.setStagnantTicksLimit?.(p.stagnantTicksLimit)
   lastApplied.value = key
 }
 </script>

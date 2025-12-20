@@ -1,26 +1,28 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, shallowRef, watch, ref, nextTick } from 'vue'
+import type UPlot from 'uplot'
+import type { Options as UPlotOptions, AlignedData } from 'uplot'
 
 // Minimal uPlot line wrapper. Lazy-loads uplot at runtime.
 interface Props {
   // uPlot expects data as [x[], y1[], y2[], ...]
-  data: number[][]
-  options?: any
+  data: AlignedData
+  options?: Partial<UPlotOptions>
   class?: string
 }
 const props = defineProps<Props>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
-let uplotMod: any = null
-const chart = shallowRef<any>(null)
+let uplotMod: typeof import('uplot') | null = null
+const chart = shallowRef<UPlot | null>(null)
 let ro: ResizeObserver | null = null
 
 async function createChart() {
   if (!rootEl.value) return
   if (!uplotMod) uplotMod = await import('uplot')
-  const UPlot = uplotMod.default || uplotMod
+  const UPlotCtor = (uplotMod.default ?? uplotMod) as typeof UPlot
   const size = rootEl.value.getBoundingClientRect()
-  const baseOpts = {
+  const baseOpts: UPlotOptions = {
     width: Math.max(100, Math.floor(size.width || 400)),
     height: Math.max(80, Math.floor(size.height || 200)),
     series:
@@ -28,11 +30,11 @@ async function createChart() {
         ? props.options.series
         : [{}, ...(props.data?.slice(1) || []).map(() => ({}))],
     axes: props.options?.axes ?? [{}, {}],
-    ...props.options,
+    ...(props.options ?? {}),
   }
   // Ensure container is empty
   rootEl.value.innerHTML = ''
-  chart.value = new UPlot(baseOpts, props.data || [[], []], rootEl.value)
+  chart.value = new UPlotCtor(baseOpts, props.data || [[], []], rootEl.value)
 }
 
 function destroyChart() {

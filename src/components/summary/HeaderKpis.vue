@@ -5,19 +5,19 @@ const store = useSimulationStore()
 
 // Base fields
 const ended = computed(() => store.lastGenEnd.value)
-const gen = computed(() => ended.value?.gen ?? (store.generation as any).value)
+const gen = computed(() => ended.value?.gen ?? store.generation.value)
 const reason = computed(() => ended.value?.reason ?? 'stagnation')
 const avgSpeed = computed(() => store.movementStats.avgSpeed)
-const liveCreatures = computed(() => (store.creatures as any).value?.length ?? 0)
-const livePlants = computed(() => (store.plants as any).value?.length ?? 0)
-const liveCorpses = computed(() => (store.corpses as any).value?.length ?? 0)
-const births = computed(() => (store.telemetry as any)?.totals?.births ?? 0)
-const deaths = computed(() => (store.telemetry as any)?.totals?.deaths ?? 0)
-const worldSec = computed(() => Number((store.worldTimeSec as any).value ?? 0))
+const liveCreatures = computed(() => store.creatures.value?.length ?? 0)
+const livePlants = computed(() => store.plants.value?.length ?? 0)
+const liveCorpses = computed(() => store.corpses.value?.length ?? 0)
+const births = computed(() => store.telemetry?.totals?.births ?? 0)
+const deaths = computed(() => store.telemetry?.totals?.deaths ?? 0)
+const worldSec = computed(() => Number(store.worldTimeSec.value ?? 0))
 
 // Timing: end timestamp and duration
 const endTimestampMs = computed(() => ended.value?.timestamp ?? null)
-const genStartMs = computed(() => (store.currentGenStartTs as any).value as number)
+const genStartMs = computed(() => store.currentGenStartTs.value as number)
 const durationSec = computed(() => {
   const endMs = endTimestampMs.value ?? Date.now()
   const startMs = Number(genStartMs.value) || Date.now()
@@ -25,7 +25,7 @@ const durationSec = computed(() => {
 })
 
 // Other KPIs
-const stagTicks = computed(() => (store.stagnantTicks as any).value ?? 0)
+const stagTicks = computed(() => store.stagnantTicks.value ?? 0)
 
 // UX helpers: formatters and copy-to-clipboard
 function fmtSeconds(s: number) {

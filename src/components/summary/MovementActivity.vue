@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref, watch } from 'vue'
+import type { EChartsOption } from 'echarts'
 import { useSimulationStore } from '../../composables/useSimulationStore'
 import { useUserPrefs } from '../../composables/useUserPrefs'
 import { useUiPrefs } from '../../composables/useUiPrefs'
@@ -7,16 +8,23 @@ const UPlotLine = defineAsyncComponent(() => import('./charts/UPlotLine.vue'))
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 
 const store = useSimulationStore()
-const avgSeries = computed<number[]>(() => (store.telemetry as any)?.series?.avgSpeed ?? [])
+type MovementSeries = { avgSpeed?: number[] }
+type MovementTelemetry = { series?: MovementSeries }
+const avgSeries = computed<number[]>(() =>
+  ((store.telemetry as MovementTelemetry)?.series?.avgSpeed ?? []).filter(
+    (v) => typeof v === 'number',
+  ),
+)
 const xData = computed<number[]>(() => avgSeries.value.map((_, i) => i))
 const { getMovementActivity, setMovementActivity } = useUiPrefs()
 const movePrefs = getMovementActivity()
 const showThreshold = ref<boolean>(
   typeof movePrefs?.showThreshold === 'boolean' ? movePrefs.showThreshold : true,
 )
-const threshold = computed<number>(
-  () => (store as any)?.simulationParams?.movementThreshold ?? 0.02,
-)
+const threshold = computed<number>(() => {
+  const raw = (store.simulationParams as { movementThreshold?: number })?.movementThreshold
+  return typeof raw === 'number' ? raw : 0.02
+})
 const threshSeries = computed<number[]>(() => avgSeries.value.map(() => threshold.value))
 const uData = computed<number[][]>(() =>
   showThreshold.value
@@ -31,8 +39,10 @@ const uOpts = computed(() => ({
 }))
 
 // Histogram of avg speeds (last N samples)
-const HIST_BINS = ref<number>(Number.isFinite(movePrefs?.histBins) ? (movePrefs?.histBins as number) : 20)
-const histOption = computed(() => {
+const HIST_BINS = ref<number>(
+  Number.isFinite(movePrefs?.histBins) ? (movePrefs?.histBins as number) : 20,
+)
+const histOption = computed<EChartsOption>(() => {
   const src = avgSeries.value
   const N = Math.min(src.length, 600) // recent window
   const data = N > 0 ? src.slice(src.length - N) : []
@@ -86,7 +96,8 @@ const percentiles = computed(() => {
 })
 
 // Exports
-const histRef = ref<any>(null)
+type ChartExpose = { downloadPNG?: (filename?: string) => void }
+const histRef = ref<ChartExpose | null>(null)
 const lineRef = ref<HTMLDivElement | null>(null)
 const { setLastExport, getLastExport, getPreferredExport, setPreferredExport } = useUserPrefs()
 const PREF_HIST = 'summary:move-hist'
@@ -116,9 +127,15 @@ function downloadText(filename: string, text: string) {
 
 function exportHistCsv() {
   setLastExport(PREF_HIST, 'csv')
-  const opt: any = histOption.value
-  const labels: string[] = opt?.xAxis?.data ?? []
-  const bins: number[] = opt?.series?.[0]?.data ?? []
+  const opt = histOption.value
+  const labels: string[] = Array.isArray((opt as { xAxis?: { data?: unknown[] } }).xAxis?.data)
+    ? ((opt as { xAxis?: { data?: unknown[] } }).xAxis!.data as unknown[]).map((v) => String(v))
+    : []
+  const binsRaw = Array.isArray((opt as { series?: unknown[] }).series)
+    ? (((opt as { series?: { data?: unknown[] }[] }).series?.[0]?.data as unknown[] | undefined) ??
+      [])
+    : []
+  const bins: number[] = binsRaw.map((v) => Number(v) || 0)
   const rows = [['bin', 'count'], ...labels.map((l, i) => [l, `${bins[i] ?? 0}`])]
   downloadText('movement-histogram.csv', rows.map((r) => r.join(',')).join('\n'))
 }
@@ -133,9 +150,10 @@ function exportLineCsv() {
 
 function downloadLinePng() {
   setLastExport(PREF_LINE, 'png')
-  const root = lineRef.value as any
+  const root = lineRef.value
   if (!root) return
-  const host: any = typeof root.querySelector === 'function' ? root : root.$el
+  const host: HTMLElement =
+    typeof root.querySelector === 'function' ? root : (root as { $el: HTMLElement }).$el
   if (!host || typeof host.querySelector !== 'function') return
   const canvas = host.querySelector('canvas') as HTMLCanvasElement | null
   if (!canvas) return
@@ -147,7 +165,7 @@ function downloadLinePng() {
 }
 function downloadHistPng() {
   setLastExport(PREF_HIST, 'png')
-  ;(histRef as any)?.downloadPNG?.('movement-histogram.png')
+  histRef.value?.downloadPNG?.('movement-histogram.png')
 }
 
 function exportHistUsingPreferred() {

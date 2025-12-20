@@ -7,7 +7,7 @@ const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 const store = useSimulationStore()
 
 // Telemetry series for the just-ended generation
-const series = computed(() => (store.telemetry as any)?.series ?? {})
+const series = computed(() => store.telemetry?.series ?? {})
 
 // Controls: smoothing toggle + window selection for recent data views
 const smoothingOn = ref<boolean>(false)
@@ -47,8 +47,8 @@ function sparkOption(data: number[], color = '#60a5fa', label = '') {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      formatter: (params: any) => {
-        const p = Array.isArray(params) ? params[0] : params
+      formatter: (params: { value: number }[]) => {
+        const p = params?.[0]
         const v = Number(p?.value ?? 0)
         return label ? `${label}: ${v.toFixed(2)}` : v.toFixed(2)
       },
@@ -111,10 +111,13 @@ const optBirths = computed(() => sparkOption(procBirths.value, '#f59e0b', 'Birth
 const optDeaths = computed(() => sparkOption(procDeaths.value, '#ef4444', 'Deaths/step'))
 
 // Refs for PNG download from each sparkline
-const refAvg = ref<any>(null)
-const refPop = ref<any>(null)
-const refBirths = ref<any>(null)
-const refDeaths = ref<any>(null)
+interface ChartExpose {
+  downloadPNG?: (filename: string) => void
+}
+const refAvg = ref<ChartExpose | null>(null)
+const refPop = ref<ChartExpose | null>(null)
+const refBirths = ref<ChartExpose | null>(null)
+const refDeaths = ref<ChartExpose | null>(null)
 
 // Utility to download CSV text as a file
 function downloadText(filename: string, text: string) {

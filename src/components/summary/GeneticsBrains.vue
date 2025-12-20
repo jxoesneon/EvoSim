@@ -1,34 +1,32 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue'
-import { useSimulationStore } from '../../composables/useSimulationStore'
+import { useSimulationStore, type Creature } from '../../composables/useSimulationStore'
+import type { EChartsOption } from 'echarts'
 import { useUserPrefs } from '../../composables/useUserPrefs'
 
 // Async EChart wrapper used by the three histograms
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 const store = useSimulationStore()
-const chartEyesRef = ref<any>(null)
-const chartSightRef = ref<any>(null)
-const chartFovRef = ref<any>(null)
+type ChartExpose = { downloadPNG?: (filename?: string) => void }
+const chartEyesRef = ref<ChartExpose | null>(null)
+const chartSightRef = ref<ChartExpose | null>(null)
+const chartFovRef = ref<ChartExpose | null>(null)
 
 // Source data (phenotypes) for histograms
-const creatures = computed<any[]>(() => {
-  const src: any = (store as any)?.creatures
-  const arr = src && 'value' in (src as any) ? (src as any).value : src
+const creatures = computed<Creature[]>(() => {
+  const arr = (store.creatures as { value?: Creature[] }).value
   return Array.isArray(arr) ? arr : []
 })
 
-const eyesCounts = computed<number[]>(() => {
-  const list = Array.isArray(creatures.value) ? creatures.value : []
-  return list.map((c: any) => Number(c?.phenotype?.eyesCount ?? 2) || 2)
-})
-const sightRanges = computed<number[]>(() => {
-  const list = Array.isArray(creatures.value) ? creatures.value : []
-  return list.map((c: any) => Number(c?.phenotype?.sightRange ?? 90) || 90)
-})
-const fovs = computed<number[]>(() => {
-  const list = Array.isArray(creatures.value) ? creatures.value : []
-  return list.map((c: any) => Number(c?.phenotype?.fieldOfViewDeg ?? 180) || 180)
-})
+const eyesCounts = computed<number[]>(() =>
+  creatures.value.map((c) => Number(c?.phenotype?.eyesCount ?? 2) || 2),
+)
+const sightRanges = computed<number[]>(() =>
+  creatures.value.map((c) => Number(c?.phenotype?.sightRange ?? 90) || 90),
+)
+const fovs = computed<number[]>(() =>
+  creatures.value.map((c) => Number(c?.phenotype?.fieldOfViewDeg ?? 180) || 180),
+)
 
 // Discrete eyes count (1..6) frequency
 function countByEyes(arr: number[]) {
@@ -52,7 +50,7 @@ function hist(arr: number[], min: number, max: number, bins: number) {
 }
 
 // Bar chart option: Eyes count distribution
-const eyesOption = computed(() => ({
+const eyesOption = computed<EChartsOption>(() => ({
   grid: { left: 30, right: 10, top: 20, bottom: 20 },
   xAxis: { type: 'category', data: ['1', '2', '3', '4', '5', '6'] },
   yAxis: { type: 'value', minInterval: 1 },
@@ -61,8 +59,8 @@ const eyesOption = computed(() => ({
   tooltip: {
     trigger: 'axis',
     confine: true,
-    formatter: (params: any[]) => {
-      const p = params?.[0]
+    formatter: (params) => {
+      const p = Array.isArray(params) ? params[0] : undefined
       if (!p) return ''
       return `Eyes=${p.axisValue}: ${p.data} creatures`
     },
@@ -73,7 +71,7 @@ const eyesOption = computed(() => ({
 const sightBins = ref<number>(10)
 const sightMin = 20,
   sightMax = 200
-const sightOption = computed(() => {
+const sightOption = computed<EChartsOption>(() => {
   const bins = sightBins.value
   const data = hist(sightRanges.value, sightMin, sightMax, bins)
   const labels = Array.from({ length: bins }, (_, i) =>
@@ -88,10 +86,10 @@ const sightOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      formatter: (params: any[]) => {
-        const p = params?.[0]
+      formatter: (params) => {
+        const p = Array.isArray(params) ? params[0] : undefined
         if (!p) return ''
-        return `Sight ~${p.axisValue}: ${p.data} creatures`
+        return `Sight ~${(p as { axisValue?: unknown })?.axisValue}: ${(p as { data?: unknown })?.data} creatures`
       },
     },
   }
@@ -169,15 +167,15 @@ function exportFovCsv() {
 // PNG exports via EChart refs
 function exportEyesPng() {
   setLastExport(PREF_EYES, 'png')
-  ;(chartEyesRef as any)?.downloadPNG?.('genetics-eyes.png')
+  chartEyesRef.value?.downloadPNG?.('genetics-eyes.png')
 }
 function exportSightPng() {
   setLastExport(PREF_SIGHT, 'png')
-  ;(chartSightRef as any)?.downloadPNG?.('genetics-sight.png')
+  chartSightRef.value?.downloadPNG?.('genetics-sight.png')
 }
 function exportFovPng() {
   setLastExport(PREF_FOV, 'png')
-  ;(chartFovRef as any)?.downloadPNG?.('genetics-fov.png')
+  chartFovRef.value?.downloadPNG?.('genetics-fov.png')
 }
 
 function exportEyesUsingPreferred() {
@@ -231,8 +229,8 @@ type HofRow = {
 }
 // Hall of Fame table mapped to genetic vision specs
 const hofTop = computed<HofRow[]>(() => {
-  const list = (store.getHallOfFameTop?.(5) as any[]) ?? []
-  return list.map((e: any) => {
+  const list = store.getHallOfFameTop?.(5) ?? []
+  return list.map((e: { id: string; name?: string; lifespan?: number }) => {
     const vs = store.getVisionSpec?.(e.id) || { eyesCount: 2, sightRange: 90, fieldOfViewDeg: 180 }
     return {
       id: e.id,
@@ -263,7 +261,7 @@ const fovOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       confine: true,
-      formatter: (params: any[]) => {
+      formatter: (params: { axisValue: string; data: number }[]) => {
         const p = params?.[0]
         if (!p) return ''
         return `FOV ~${p.axisValue}°: ${p.data} creatures`

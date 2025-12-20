@@ -1,67 +1,203 @@
-# EvoSim
+# EvoSim 🧬
 
-This template should help get you started developing with Vue 3 in Vite.
+An evolutionary simulation combining neural networks, physics, metabolism, and genetics. Creatures evolve through natural selection, learning to survive in a dynamic procedurally-generated environment.
 
-## Recommended IDE Setup
+## ✨ Features
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+- **Neural Network Brains**: Feed-forward networks with configurable activation functions
+- **Physics Simulation**: Movement, collision detection, terrain effects
+- **Metabolic Cost System**: Energy, stamina, health, thirst mechanics
+- **Mendelian Genetics**: Vision trait inheritance (V/v, E/e alleles)
+- **WebGL Rendering**: 2D/3D hybrid visualization with Three.js
+- **Web Workers**: Off-main-thread simulation for 60 FPS
+- **WASM Backend**: Optional Rust-powered high-performance simulation
+- **Procedural Generation**: Dynamic weather, terrain, and ecosystems
 
-## Type Support for `.vue` Imports in TS
+## 🚀 Quick Start
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
+### Prerequisites
 
-## Customize configuration
+- Node.js 18+
+- npm 9+
 
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+### Installation
 
 ```sh
 npm install
 ```
 
-### Compile and Hot-Reload for Development
+### Development
 
 ```sh
 npm run dev
 ```
 
-### Type-Check, Compile and Minify for Production
+Open [http://localhost:5173](http://localhost:5173)
+
+### Production Build
 
 ```sh
 npm run build
+npm run preview
 ```
 
-### Run Unit Tests with [Vitest](https://vitest.dev/)
+## 🧪 Testing
+
+### Unit Tests (Vitest)
 
 ```sh
-npm run test:unit
+npm run test:unit              # Run all unit tests
+npm run test:unit -- --watch   # Watch mode
+npm run test:unit -- --coverage # Coverage report
 ```
 
-### Run End-to-End Tests with [Playwright](https://playwright.dev)
+**Current Coverage**: 80 passing tests covering brain logic, physics, and metabolism
+
+### End-to-End Tests (Playwright)
 
 ```sh
-# Install browsers for the first run
+# Install browsers (first time only)
 npx playwright install
 
-# When testing on CI, must build the project first
-npm run build
-
-# Runs the end-to-end tests
+# Run E2E tests
 npm run test:e2e
-# Runs the tests only on Chromium
+
+# Specific browser
 npm run test:e2e -- --project=chromium
-# Runs the tests of a specific file
-npm run test:e2e -- tests/example.spec.ts
-# Runs the tests in debug mode
+npm run test:e2e -- --project=firefox
+npm run test:e2e -- --project=webkit
+
+# Debug mode
 npm run test:e2e -- --debug
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+**Current Coverage**: 10 smoke tests across 3 browsers (30 total test runs)
+
+## 📁 Project Structure
+
+```
+EvoSim/
+├── src/
+│   ├── components/        # Vue components
+│   │   ├── summary/       # Dashboard & analytics
+│   │   └── *.vue          # UI components
+│   ├── composables/       # Vue composables (state, prefs)
+│   │   └── useSimulationStore.ts  # Main simulation state
+│   ├── webgl/             # Three.js renderer
+│   │   └── renderer.ts    # WebGL rendering logic
+│   ├── workers/           # Web Workers
+│   │   ├── sim.worker.ts  # Simulation loop (JS)
+│   │   ├── weather2d.worker.ts
+│   │   ├── terrain.worker.ts
+│   │   └── noise3d.worker.ts
+│   ├── wasm/              # WASM bindings (optional)
+│   │   └── ecosim/        # Rust simulation backend
+│   ├── zegion/            # Modular brain system
+│   │   ├── activations/   # Activation functions
+│   │   └── plasticity/    # Neuroplasticity (experimental)
+│   └── __tests__/         # Unit tests
+├── e2e/                   # E2E tests
+├── docs/                  # Documentation
+└── public/                # Static assets
+```
+
+## 🧠 Architecture
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed technical documentation.
+
+### Key Components
+
+1. **State Management**: `useSimulationStore.ts` - Single source of truth
+2. **Simulation Loop**: `sim.worker.ts` - Physics, brains, metabolism (60 FPS)
+3. **Rendering**: `renderer.ts` - WebGL visualization
+4. **WASM Backend**: Optional Rust simulation for 10-100x speedup
+
+## 🛠️ Tech Stack
+
+- **Frontend**: Vue 3, TypeScript, TailwindCSS, DaisyUI
+- **Rendering**: Three.js (WebGL)
+- **Build**: Vite
+- **Testing**: Vitest (unit), Playwright (E2E)
+- **Backend**: Web Workers, Optional WASM (Rust)
+
+## 📊 Performance
+
+- **Target**: 60 FPS with 1000+ entities
+- **Optimization**: InstancedMesh, SharedArrayBuffer, worker threads
+- **Profiling**: Built-in FPS meter, telemetry panels
+
+## 🎮 Usage
+
+### Controls
+
+- **Start/Stop**: Control simulation state
+- **Reset**: New generation
+- **+Creature/+Plant**: Add entities
+- **Speed Slider**: Adjust simulation speed
+- **Vision Toggle**: Show/hide vision cones
+
+### UI Panels
+
+- **Stats**: Population, movement, genetics
+- **Telemetry**: Cost system, action events
+- **Hall of Fame**: Top creatures by lifespan
+
+## 🔧 Development
+
+### Code Quality
 
 ```sh
-npm run lint
+npm run lint              # ESLint
+npm run type-check        # TypeScript type checking
 ```
+
+### IDE Setup
+
+**Recommended**: [VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar)
+
+## 🐛 Debugging
+
+### Browser DevTools
+
+- **Console**: Simulation events, WASM status, cost telemetry
+- **Performance**: FPS profiling, worker thread activity
+- **Network**: Asset loading, worker script fetching
+
+### Error Boundaries
+
+App includes Vue error boundaries with:
+
+- Error message display
+- Stack trace viewer
+- Graceful recovery or reload options
+
+## 📖 Documentation
+
+- **Architecture**: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Cost System**: [`Cost.md`](Cost.md)
+- **Neural Inputs**: [`inputs.md`](inputs.md)
+- **API Docs**: Generated from JSDoc comments
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Write tests for your changes
+4. Ensure all tests pass (`npm run test:unit && npm run test:e2e`)
+5. Commit your changes (`git commit -m 'Add amazing feature'`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+## 🙏 Acknowledgments
+
+- Three.js for WebGL rendering
+- Vue 3 for reactive UI
+- Vite for blazing-fast development
+- Playwright & Vitest for comprehensive testing
 
 ## Telemetry and Parity Validators
 

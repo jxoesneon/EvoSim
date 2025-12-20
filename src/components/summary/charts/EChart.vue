@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, shallowRef, watch, nextTick } from 'vue'
+import type { ECharts, EChartsOption } from 'echarts'
 
 interface Props {
-  option: any
+  option: EChartsOption
   autoresize?: boolean
   class?: string
 }
 const props = defineProps<Props>()
 
 const rootEl = ref<HTMLDivElement | null>(null)
-let echartsMod: any = null
-const chart = shallowRef<any>(null)
+let echartsMod: typeof import('echarts') | null = null
+const chart = shallowRef<ECharts | null>(null)
 let ro: ResizeObserver | null = null
 
 async function ensureLib() {
   if (!echartsMod) echartsMod = await import('echarts')
-  return echartsMod.default || echartsMod
+  const mod = echartsMod.default ?? echartsMod
+  return mod as typeof import('echarts')
 }
 
 async function createChart() {
@@ -71,9 +73,9 @@ watch(
 function getInstance() {
   return chart.value
 }
-function getDataURL(options?: any) {
+function getDataURL(options?: Parameters<ECharts['getDataURL']>[0]) {
   try {
-    return chart.value?.getDataURL?.(options)
+    return chart.value?.getDataURL?.(options as Parameters<ECharts['getDataURL']>[0])
   } catch {
     return null
   }
@@ -89,9 +91,7 @@ function downloadPNG(filename = 'chart.png') {
     const a = document.createElement('a')
     a.href = url
     a.download = filename
-    document.body.appendChild(a)
     a.click()
-    document.body.removeChild(a)
   } catch {}
 }
 

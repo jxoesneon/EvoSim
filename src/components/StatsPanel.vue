@@ -3,13 +3,46 @@ import { ref, watch, watchEffect, computed, onBeforeUnmount } from 'vue'
 import { useSimulationStore } from '../composables/useSimulationStore'
 import { useUiPrefs } from '../composables/useUiPrefs'
 
-const props = defineProps<{ creature?: Record<string, any> }>()
+// Types for creature and brain data
+interface BrainData {
+  inputs?: number[]
+  output?: number[]
+  activations?: number[][]
+  weights?: (number[] | number[][])[]
+  biases?: number[]
+  inputNodes?: number
+  hiddenNodes?: number
+  outputNodes?: number
+  layerSizes?: number[]
+}
+
+interface CreatureData {
+  id: string
+  name?: string
+  health: number
+  energy: number
+  thirst: number
+  lifespan: number
+  phenotype?: {
+    diet: string
+    size: number
+    speed: number
+    sightRange: number
+    hardiness: number
+  }
+  genes?: Record<string, [string, string]>
+  brain?: BrainData
+}
+
+const props = defineProps<{ creature?: CreatureData }>()
 
 const emit = defineEmits(['close'])
 const { getStatsPanel, setStatsPanel, getActionNoticing, setActionNoticing } = useUiPrefs()
 const statsPrefs = getStatsPanel()
 const activeTab = ref<'stats' | 'brain' | 'events'>(statsPrefs?.activeTab ?? 'stats')
-const showInputs = ref<boolean>(typeof statsPrefs?.showInputs === 'boolean' ? statsPrefs.showInputs : true)
+const showInputs = ref<boolean>(
+  typeof statsPrefs?.showInputs === 'boolean' ? statsPrefs.showInputs : true,
+)
 const showOutputs = ref<boolean>(
   typeof statsPrefs?.showOutputs === 'boolean' ? statsPrefs.showOutputs : true,
 )
@@ -60,16 +93,13 @@ function prettyLabel(raw: string): string {
     // Title-case default
     return low.charAt(0).toUpperCase() + low.slice(1)
   }
-  return spaced
-    .split(' ')
-    .map(mapToken)
-    .join(' ')
+  return spaced.split(' ').map(mapToken).join(' ')
 }
 
 // Pull stable input metadata (labels + categories) from the store
 type InputCategory = 'Internal' | 'External'
 const inputMetaList = computed(() => {
-  const brain = props.creature?.brain as any | undefined
+  const brain = props.creature?.brain
   const total =
     (Array.isArray(brain?.inputs) ? brain.inputs.length : 0) ||
     (typeof brain?.inputNodes === 'number' ? brain.inputNodes : 0) ||
@@ -289,16 +319,8 @@ watch(showInputs, (v) => setStatsPanel({ showInputs: v }))
 watch(showOutputs, (v) => setStatsPanel({ showOutputs: v }))
 watch(showConnections, (v) => setStatsPanel({ showConnections: v }))
 watch(sortBy, (v) => setStatsPanel({ sortBy: v }))
-watch(
-  typeFilters,
-  (v) => setStatsPanel({ typeFilters: { ...v } as any }),
-  { deep: true },
-)
-watch(
-  keyFilters,
-  (v) => setStatsPanel({ keyFilters: { ...v } as any }),
-  { deep: true },
-)
+watch(typeFilters, (v) => setStatsPanel({ typeFilters: { ...v } }), { deep: true })
+watch(keyFilters, (v) => setStatsPanel({ keyFilters: { ...v } }), { deep: true })
 
 function selectAllKeys(v: boolean) {
   for (const k of EVENT_KEYS) keyFilters.value[k] = v
@@ -326,7 +348,7 @@ watchEffect(() => {
   requestAnimationFrame(() => renderBrainVisualization(brain))
 })
 
-function renderBrainVisualization(brain: any) {
+function renderBrainVisualization(brain: BrainData) {
   const canvas = document.getElementById('brainCanvas') as HTMLCanvasElement
   if (!canvas) return
 
@@ -615,7 +637,11 @@ function computedOutputLabels(len: number): string[] {
         </div>
         <div class="mt-3 grid grid-cols-2 gap-3 items-center">
           <label class="flex items-center gap-2 text-sm">
-            <input type="checkbox" v-model="actionPrefs.byAction.eats_plant" :disabled="!actionPrefs.enabled" />
+            <input
+              type="checkbox"
+              v-model="actionPrefs.byAction.eats_plant"
+              :disabled="!actionPrefs.enabled"
+            />
             Eats plant
           </label>
           <div class="flex items-center gap-2 text-sm">

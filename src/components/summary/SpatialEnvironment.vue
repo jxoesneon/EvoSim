@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from 'vue'
-import { useSimulationStore } from '../../composables/useSimulationStore'
+import { useSimulationStore, type Creature } from '../../composables/useSimulationStore'
 
 // Async EChart wrapper used to render the heatmap + scatter overlay
 const EChart = defineAsyncComponent(() => import('./charts/EChart.vue'))
 const store = useSimulationStore()
-const chartRef = ref<any>(null)
+type ChartExpose = { downloadPNG?: (filename?: string) => void }
+const chartRef = ref<ChartExpose | null>(null)
 
 // Camera is used to center the sampled window; creatures provide overlay points
-const camera = computed(() => store.camera as any)
-const creatures = computed<any[]>(() => {
-  const src: any = (store as any)?.creatures
-  const arr = src && 'value' in (src as any) ? (src as any).value : src
+const camera = computed(() => store.camera)
+const creatures = computed<Creature[]>(() => {
+  const arr = store.creatures.value
   return Array.isArray(arr) ? arr : []
 })
 
@@ -21,8 +21,8 @@ const span = 800 // world units across the sampled window
 
 // Build heatmap + scatter option each render based on camera and creatures
 const heatOption = computed(() => {
-  const cx = Number((camera.value as any)?.x || 0)
-  const cy = Number((camera.value as any)?.y || 0)
+  const cx = Number(camera.value?.x || 0)
+  const cy = Number(camera.value?.y || 0)
   const half = span / 2
   const step = span / (gridSize - 1)
   const data: number[][] = []

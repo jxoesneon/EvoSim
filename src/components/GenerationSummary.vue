@@ -7,11 +7,22 @@ const emit = defineEmits<{
   (e: 'start-next'): void
 }>()
 
+// Type for simulation parameters
+type SimulationParams = {
+  mutationRate: number
+  mutationAmount: number
+  plantSpawnRate: number
+  waterLevel: number
+  movementThreshold: number
+  stagnantTicksLimit: number
+  [key: string]: number | boolean | string
+}
+
 const store = useSimulationStore()
 
 // Read stats for the generation that just ended (reason + gen number)
 const ended = computed(() => store.lastGenEnd.value)
-const genNumber = computed(() => ended.value?.gen ?? (store.generation as any).value)
+const genNumber = computed(() => ended.value?.gen ?? store.generation.value)
 const reason = computed(() => ended.value?.reason ?? 'stagnation')
 
 // Snapshot stats displayed as simple cards in the header
@@ -20,27 +31,27 @@ const hofTop = computed(() => store.getHallOfFameTop?.(5) ?? [])
 
 // Bindings for quick tweaks for next generation (two-way with store setters)
 const mutationRate = computed<number>({
-  get: () => (store.simulationParams as any).mutationRate as number,
+  get: () => (store.simulationParams as SimulationParams).mutationRate,
   set: (v: number) => store.setMutationRate?.(Number(v)),
 })
 const mutationAmount = computed<number>({
-  get: () => (store.simulationParams as any).mutationAmount as number,
+  get: () => (store.simulationParams as SimulationParams).mutationAmount,
   set: (v: number) => store.setMutationAmount?.(Number(v)),
 })
 const plantSpawnRate = computed<number>({
-  get: () => (store.simulationParams as any).plantSpawnRate as number,
+  get: () => (store.simulationParams as SimulationParams).plantSpawnRate,
   set: (v: number) => store.setPlantSpawnRate?.(Number(v)),
 })
 const waterLevel = computed<number>({
-  get: () => (store.simulationParams as any).waterLevel as number,
+  get: () => (store.simulationParams as SimulationParams).waterLevel,
   set: (v: number) => store.setWaterLevel?.(Number(v)),
 })
 const movementThreshold = computed<number>({
-  get: () => (store.simulationParams as any).movementThreshold as number,
+  get: () => (store.simulationParams as SimulationParams).movementThreshold,
   set: (v: number) => store.setMovementThreshold?.(Number(v)),
 })
 const stagnantTicksLimit = computed<number>({
-  get: () => (store.simulationParams as any).stagnantTicksLimit as number,
+  get: () => (store.simulationParams as SimulationParams).stagnantTicksLimit,
   set: (v: number) => store.setStagnantTicksLimit?.(Number(v)),
 })
 

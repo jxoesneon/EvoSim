@@ -4,8 +4,8 @@ import { useSimulationStore } from '../../composables/useSimulationStore'
 
 // Pull telemetry for the just-ended generation
 const store = useSimulationStore()
-const totals = computed(() => (store.telemetry as any)?.totals ?? {})
-const avgSpeed = computed<number[]>(() => (store.telemetry as any)?.series?.avgSpeed ?? [])
+const totals = computed(() => store.telemetry?.totals ?? {})
+const avgSpeed = computed<number[]>(() => store.telemetry?.series?.avgSpeed ?? [])
 
 // Derived signals used to drive rule-based recommendations
 const recentAvgSpeed = computed(() => {
@@ -31,11 +31,11 @@ const insights = computed(() => {
       id: 'low-mobility',
       text: `Low movement detected (avg=${recentAvgSpeed.value.toFixed(3)}). Relax stagnation detection (lower movement threshold, extend stagnantTicksLimit).`,
       apply: () => {
-        const p: any = store.simulationParams
+        const p = store.simulationParams
         const mt = Math.max(0, Number(p.movementThreshold || 0) * 0.8)
         const st = Math.min(5000, Number(p.stagnantTicksLimit || 600) + 200)
-        ;(store as any)?.setMovementThreshold?.(mt)
-        ;(store as any)?.setStagnantTicksLimit?.(st)
+        store.setMovementThreshold?.(mt)
+        store.setStagnantTicksLimit?.(st)
       },
     })
   }
@@ -46,9 +46,9 @@ const insights = computed(() => {
       id: 'deaths-gt-births',
       text: 'Deaths exceed births. Increase plant spawn rate slightly to support population recovery.',
       apply: () => {
-        const p: any = store.simulationParams
+        const p = store.simulationParams
         const cur = Number(p.plantSpawnRate || 0)
-        ;(store as any)?.setPlantSpawnRate?.(Math.min(1, cur + 0.05))
+        store.setPlantSpawnRate?.(Math.min(1, cur + 0.05))
       },
     })
   }
